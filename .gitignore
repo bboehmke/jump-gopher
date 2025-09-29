@@ -1,0 +1,4 @@
+ssh_host_rsa_key
+tmp/
+data.db
+.idea/

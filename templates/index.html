@@ -1,0 +1,73 @@
+<html>
+<head>
+    <title>Jump Gopher</title>
+    <style>
+        table {
+            table-layout: fixed;
+            width: 100%;
+        }
+
+        table td {
+            word-wrap: break-word;         /* All browsers since IE 5.5+ */
+            overflow-wrap: break-word;     /* Renamed property in CSS3 draft spec */
+        }
+    </style>
+</head>
+<body>
+    <h1>Jump Gopher</h1>
+    <p>Welcome {{.user_name}}!</p>
+
+    <table border="1">
+        <tr>
+            <th style="width:10%;"><b>Name</b></th>
+            <th><b>Key</b></th>
+            <th style="width:10%;"></th>
+        </tr>
+        {{range $key := .keys}}
+        <tr>
+            <td>{{ $key.Name }}</td>
+            <td>{{ $key.PublicKey }}</td>
+            <td>
+                <form method="POST" action="">
+                    <input type="hidden" name="id" value="{{ $key.ID }}"/>
+                    <input type="hidden" name="action" value="delete"/>
+                    <input type="submit" value="Delete"/>
+                </form>
+            </td>
+        </tr>
+        {{end}}
+    </table>
+
+    <br/>
+    <br/>
+
+    {{ if .error }}
+    <h2 style="color: red;">Error: {{ .error }}</h2>
+    {{ end }}
+
+    <h3>Add Public Key</h3>
+    <form method="POST">
+        <input type="text" name="name" placeholder="Key Name"/><br/>
+        <textarea name="public_key" placeholder="Public Key" rows="5" cols="80"></textarea><br/>
+        <input type="hidden" name="action" value="add"/>
+        <input type="submit" value="Add Key"/>
+    </form>
+
+    <br/>
+    <br/>
+    <h3>Permissions</h3>
+    <h4>Allow</h4>
+    <ul>
+        {{ range .permissions.Allow }}
+            <li>{{ . }}</li>
+        {{ end }}
+    </ul>
+    <h4>Deny</h4>
+    <ul>
+        {{ range .permissions.Deny }}
+            <li>{{ . }}</li>
+        {{ end }}
+    </ul>
+
+</body>
+</html>
