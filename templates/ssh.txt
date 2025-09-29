@@ -1,0 +1,13 @@
+Hello {{ .user_name }}!
+
+Account Status: >>{{.account_status}}<<
+
+Permissions:
+_Allow_:
+{{ range .permissions.Allow -}}
+  * {{.}}
+{{ end }}
+_Deny_:
+{{ range .permissions.Deny -}}
+  * {{.}}
+{{ end }}

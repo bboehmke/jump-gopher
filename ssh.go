@@ -6,10 +6,10 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
+	"text/template"
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
@@ -21,6 +21,8 @@ type SSHServer struct {
 	permissions *Permissions
 
 	server *ssh.Server
+
+	tpl *template.Template
 }
 
 func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SSHServer, error) {
@@ -28,6 +30,12 @@ func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SS
 		database:    database,
 		auth:        auth,
 		permissions: permissions,
+	}
+
+	var err error
+	sshServer.tpl, err = template.ParseFS(templates, "templates/*")
+	if err != nil {
+		return nil, fmt.Errorf("error parsing templates: %w", err)
 	}
 
 	keyName := "ssh_host_rsa_key"
@@ -112,39 +120,33 @@ func (s *SSHServer) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 }
 
 func (s *SSHServer) sessionHandler(ses ssh.Session) {
-	io.WriteString(ses, fmt.Sprintf("Hello %s\n", ses.User()))
-	io.WriteString(ses, "\n")
-
 	user, err := s.database.GetUser(ses.User())
+	var accountStatus string
 	if err != nil {
 		log.Printf("Error fetching user %s from database: %v", ses.User(), err)
-		io.WriteString(ses, ">>Account invalid - no access<<\n")
-		return
+		accountStatus = "invalid - no access"
+	} else {
+		err, err2 := s.auth.CheckUserToken(user, nil)
+		accountStatus = "valid"
+		if err != nil {
+			log.Printf("Error checking OAuth token for user %s: %v", ses.User(), err)
+			accountStatus = "invalid - no access"
+		}
+		if err2 != nil {
+			log.Printf("Database error while checking OAuth token for user %s: %v", ses.User(), err2)
+			accountStatus = "Database error"
+		}
 	}
 
-	err, err2 := s.auth.CheckUserToken(user, nil)
+	permissions := s.permissions.GetUserPermissions(ses.User())
+
+	err = s.tpl.ExecuteTemplate(ses, "ssh.txt", map[string]any{
+		"user_name":      ses.User(),
+		"account_status": accountStatus,
+		"permissions":    permissions,
+	})
 	if err != nil {
-		log.Printf("Error checking OAuth token for user %s: %v", ses.User(), err)
-		io.WriteString(ses, ">>Account invalid - no access<<\n")
-		return
-	}
-	if err2 != nil {
-		log.Printf("Database error while checking OAuth token for user %s: %v", ses.User(), err2)
-		io.WriteString(ses, "Database error\n")
-		return
-	}
-	io.WriteString(ses, ">>Valid Account!<<\n\n")
-
-	io.WriteString(ses, "Permissions:\n")
-	permissions := s.permissions.GetUserPermissions(user.Name)
-
-	io.WriteString(ses, "> Allow:\n")
-	for _, perm := range permissions.Allow {
-		io.WriteString(ses, " * "+perm+"\n")
-	}
-	io.WriteString(ses, "> Deny:\n")
-	for _, perm := range permissions.Deny {
-		io.WriteString(ses, " * "+perm+"\n")
+		log.Printf("Error executing ssh.txt template: %v", err)
 	}
 }
 

@@ -106,17 +106,6 @@ func (a *Auth) callback(c *gin.Context) {
 		log.Print(err)
 		return
 	}
-	_ = token
-
-	/*source := conf.TokenSource(context.Background(), tok)
-	tok, err = source.Token()
-	if err != nil {
-		log.Print(err)
-		c.Status(http.StatusInternalServerError)
-		return
-	}*/
-	/*client := conf.Client(c, tok)
-	_ = client*/
 
 	user, err := a.Database.GetUser(token.Claims.(jwt.MapClaims)["name"].(string))
 	if err != nil {
