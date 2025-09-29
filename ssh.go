@@ -1,14 +1,9 @@
 package main
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"text/template"
 
 	"github.com/gliderlabs/ssh"
@@ -38,49 +33,9 @@ func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SS
 		return nil, fmt.Errorf("error parsing templates: %w", err)
 	}
 
-	keyName := "ssh_host_rsa_key"
-	var hostKey *rsa.PrivateKey
-	if _, err := os.Stat(keyName); err != nil {
-		hostKey, err = rsa.GenerateKey(rand.Reader, 4096)
-		if err != nil {
-			return nil, fmt.Errorf("error generating RSA key: %w", err)
-		}
-
-		// Get ASN.1 DER format
-		privDER := x509.MarshalPKCS1PrivateKey(hostKey)
-
-		// pem.Block
-		privBlock := pem.Block{
-			Type:    "RSA PRIVATE KEY",
-			Headers: nil,
-			Bytes:   privDER,
-		}
-
-		file, err := os.Create(keyName)
-		if err != nil {
-			return nil, fmt.Errorf("error creating RSA key file: %w", err)
-		}
-
-		err = pem.Encode(file, &privBlock)
-		file.Close()
-		if err != nil {
-			return nil, fmt.Errorf("error encoding RSA key: %w", err)
-		}
-	} else {
-		bytes, err := os.ReadFile(keyName)
-		if err != nil {
-			return nil, fmt.Errorf("error reading RSA key file: %w", err)
-		}
-		block, _ := pem.Decode(bytes)
-		hostKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing RSA key: %w", err)
-		}
-	}
-
-	signer, err := gossh.NewSignerFromKey(hostKey)
+	signers, err := loadHostKeys()
 	if err != nil {
-		return nil, fmt.Errorf("error creating SSH signer: %w", err)
+		return nil, fmt.Errorf("error loading host keys: %w", err)
 	}
 
 	forwardHandler := &ssh.ForwardedTCPHandler{}
@@ -89,9 +44,7 @@ func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SS
 		Addr:             ":" + config.SshPort,
 		Handler:          sshServer.sessionHandler,
 		PublicKeyHandler: sshServer.publicKeyHandler,
-		HostSigners: []ssh.Signer{
-			signer,
-		},
+		HostSigners:      signers,
 		RequestHandlers: map[string]ssh.RequestHandler{
 			"tcpip-forward":        forwardHandler.HandleSSHRequest,
 			"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,

@@ -17,10 +17,14 @@ type Config struct {
 	OAuthAuthURL  string `conf:"OAUTH_AUTH_URL"`
 	OAuthTokenURL string `conf:"OAUTH_TOKEN_URL"`
 
-	DatabaseUrl string `conf:"DATABASE_URL,file:data.db"`
+	DatabaseUrl string `conf:"DATABASE_URL,file:data/data.db"`
 
 	WebPort string `conf:"WEB_PORT,8080"`
-	SshPort string `conf:"SSH_PORT,2222"`
+
+	SshPort        string `conf:"SSH_PORT,2222"`
+	SshHostKeyPath string `conf:"SSH_HOST_KEY_PATH,data/"`
+
+	PermissionsConfig string `conf:"PERMISSIONS_CONFIG,data/permissions.yml"`
 }
 
 func (c *Config) OAuthConfig(ctx *gin.Context) oauth2.Config {

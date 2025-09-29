@@ -26,14 +26,14 @@ type Permission struct {
 }
 
 func NewPermissions() (*Permissions, error) {
-	config := &Permissions{}
+	permissions := &Permissions{}
 
-	err := config.load()
+	err := permissions.load()
 	if err != nil {
 		return nil, err
 	}
 
-	lastStat, err := os.Stat("permissions.yml")
+	lastStat, err := os.Stat(config.PermissionsConfig)
 	if err != nil {
 		return nil, fmt.Errorf("could not stat config.yml: %w", err)
 	}
@@ -42,13 +42,13 @@ func NewPermissions() (*Permissions, error) {
 		for {
 			time.Sleep(1 * time.Second)
 
-			stat, err := os.Stat("permissions.yml")
+			stat, err := os.Stat(config.PermissionsConfig)
 			if err != nil {
 				continue
 			}
 
 			if stat.Size() != lastStat.Size() || stat.ModTime() != lastStat.ModTime() {
-				err := config.load()
+				err := permissions.load()
 				if err != nil {
 					log.Printf("error reloading config: %v", err)
 				} else {
@@ -58,14 +58,14 @@ func NewPermissions() (*Permissions, error) {
 		}
 	}()
 
-	return config, nil
+	return permissions, nil
 }
 
 func (c *Permissions) load() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	file, err := os.Open("permissions.yml")
+	file, err := os.Open(config.PermissionsConfig)
 	if err != nil {
 		return fmt.Errorf("error reading config file: %w", err)
 	}
