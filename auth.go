@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -25,33 +26,27 @@ func (a *Auth) Register(router gin.IRouter) {
 		c.Redirect(http.StatusTemporaryRedirect, conf.AuthCodeURL("state", oauth2.AccessTypeOffline))
 	})
 	authGroup.GET("/callback", a.callback)
-	authGroup.GET("/test", a.CheckAuth, a.test)
 }
 
-func (a *Auth) test(c *gin.Context) {
+func (a *Auth) CheckUserToken(user *User, c *gin.Context) (error, error) {
 	conf := config.OAuthConfig(c)
-
-	user := c.MustGet("user").(*User) // ensure user is set
 	token := user.OAuthToken()
 
-	source := conf.TokenSource(c, token)
+	source := conf.TokenSource(context.Background(), token)
 	tok, err := source.Token()
 	if err != nil {
-		log.Print(err)
-		c.Status(http.StatusInternalServerError)
-		return
+		return err, nil
 	}
 
 	if tok.AccessToken != token.AccessToken {
 		user.SetOAuthToken(tok)
 		if err := a.Database.Db.Save(user).Error; err != nil {
-			log.Print(err)
-			c.Status(http.StatusInternalServerError)
-			return
+			return nil, err
 		}
 		log.Print("Updated user token in database")
 	}
-	c.String(http.StatusOK, "OK")
+
+	return nil, nil
 }
 
 func (a *Auth) CheckAuth(c *gin.Context) {
@@ -67,6 +62,21 @@ func (a *Auth) CheckAuth(c *gin.Context) {
 	if err != nil {
 		// session not found -> redirect to login
 		c.Redirect(http.StatusTemporaryRedirect, "/auth/login")
+		c.Abort()
+		return
+	}
+
+	// check if token is still valid
+	err, err2 := a.CheckUserToken(user, c)
+	if err != nil {
+		c.String(http.StatusUnauthorized, err.Error())
+		c.Abort()
+		return
+	}
+	// err2 indicates a database error which should not be shown to the user
+	if err2 != nil {
+		log.Print(err2)
+		c.Status(http.StatusInternalServerError)
 		c.Abort()
 		return
 	}

@@ -24,14 +24,7 @@ type Config struct {
 }
 
 func (c *Config) OAuthConfig(ctx *gin.Context) oauth2.Config {
-	var scheme string
-	if ctx.Request.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	} else {
-		scheme = "http"
-	}
-
-	return oauth2.Config{
+	conf := oauth2.Config{
 		ClientID:     c.OAuthID,
 		ClientSecret: c.OAuthSecret,
 		Scopes:       strings.Split(c.OAuthScopes, ","),
@@ -39,8 +32,20 @@ func (c *Config) OAuthConfig(ctx *gin.Context) oauth2.Config {
 			AuthURL:  c.OAuthAuthURL,
 			TokenURL: c.OAuthTokenURL,
 		},
-		RedirectURL: scheme + "://" + ctx.Request.Host + "/auth/callback",
 	}
+
+	// if ctx is given, set redirect URL based on request
+	if ctx != nil {
+		var scheme string
+		if ctx.Request.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+		conf.RedirectURL = scheme + "://" + ctx.Request.Host + "/auth/callback"
+	}
+
+	return conf
 }
 
 var config Config

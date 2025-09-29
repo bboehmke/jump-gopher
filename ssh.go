@@ -112,12 +112,58 @@ func (s *SSHServer) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 }
 
 func (s *SSHServer) sessionHandler(ses ssh.Session) {
-	authorizedKey := gossh.MarshalAuthorizedKey(ses.PublicKey())
-	io.WriteString(ses, fmt.Sprintf("Hello %s your public key is\n", ses.User()))
-	ses.Write(authorizedKey)
+	io.WriteString(ses, fmt.Sprintf("Hello %s\n", ses.User()))
+	io.WriteString(ses, "\n")
+
+	user, err := s.database.GetUser(ses.User())
+	if err != nil {
+		log.Printf("Error fetching user %s from database: %v", ses.User(), err)
+		io.WriteString(ses, ">>Account invalid - no access<<\n")
+		return
+	}
+
+	err, err2 := s.auth.CheckUserToken(user, nil)
+	if err != nil {
+		log.Printf("Error checking OAuth token for user %s: %v", ses.User(), err)
+		io.WriteString(ses, ">>Account invalid - no access<<\n")
+		return
+	}
+	if err2 != nil {
+		log.Printf("Database error while checking OAuth token for user %s: %v", ses.User(), err2)
+		io.WriteString(ses, "Database error\n")
+		return
+	}
+	io.WriteString(ses, ">>Valid Account!<<\n\n")
+
+	io.WriteString(ses, "Permissions:\n")
+	permissions := s.permissions.GetUserPermissions(user.Name)
+
+	io.WriteString(ses, "> Allow:\n")
+	for _, perm := range permissions.Allow {
+		io.WriteString(ses, " * "+perm+"\n")
+	}
+	io.WriteString(ses, "> Deny:\n")
+	for _, perm := range permissions.Deny {
+		io.WriteString(ses, " * "+perm+"\n")
+	}
 }
 
 func (s *SSHServer) checkDestination(ctx ssh.Context, destHost string, destPort uint32) bool {
+	user, err := s.database.GetUser(ctx.User())
+	if err != nil {
+		log.Printf("Error fetching user %s from database: %v", ctx.User(), err)
+		return false
+	}
+	err, err2 := s.auth.CheckUserToken(user, nil)
+	if err != nil {
+		log.Printf("Error checking OAuth token for user %s: %v", ctx.User(), err)
+		return false
+	}
+	if err2 != nil {
+		log.Printf("Database error while checking OAuth token for user %s: %v", ctx.User(), err2)
+		return false
+	}
+
 	ips, err := net.LookupIP(destHost)
 	if err != nil || len(ips) == 0 {
 		log.Printf("Error looking up IP for host %s: %v", destHost, err)
