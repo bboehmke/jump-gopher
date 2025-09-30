@@ -1,6 +1,9 @@
 Hello {{ .user_name }}!
 
 Account Status: >>{{.account_status}}<<
+{{ if ne .account_status "valid" }}
+Please login to the web portal to update your account status.
+{{ end }}
 
 Permissions:
 _Allow_:

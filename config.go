@@ -19,7 +19,8 @@ type Config struct {
 
 	DatabaseUrl string `conf:"DATABASE_URL,file:data/data.db"`
 
-	WebPort string `conf:"WEB_PORT,8080"`
+	WebPort        string `conf:"WEB_PORT,8080"`
+	WebEnableProxy string `conf:"WEB_ENABLE_PROXY,false"`
 
 	SshPort        string `conf:"SSH_PORT,2222"`
 	SshHostKeyPath string `conf:"SSH_HOST_KEY_PATH,data/"`

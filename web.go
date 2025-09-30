@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	gossh "golang.org/x/crypto/ssh"
@@ -45,6 +46,9 @@ func NewWeb(database *Database, auth *Auth, permissions *Permissions) (*Web, err
 	web.router.GET("/", auth.CheckAuth, web.handleIndex)
 	web.router.POST("/", auth.CheckAuth, web.handleIndex)
 
+	if strings.ToLower(config.WebEnableProxy) == "true" {
+		web.router.GET("/proxy", web.handleProxy)
+	}
 	return web, nil
 }
 

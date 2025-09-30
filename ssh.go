@@ -41,6 +41,7 @@ func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SS
 	forwardHandler := &ssh.ForwardedTCPHandler{}
 
 	sshServer.server = &ssh.Server{
+		Version:          "JumpGopher SSH Proxy 0.0",
 		Addr:             ":" + config.SshPort,
 		Handler:          sshServer.sessionHandler,
 		PublicKeyHandler: sshServer.publicKeyHandler,
