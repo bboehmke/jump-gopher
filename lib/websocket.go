@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 
 	"github.com/coder/websocket"
 )
@@ -22,7 +22,7 @@ func WsReader(ctx context.Context, ws *websocket.Conn, writer io.Writer) error {
 			return fmt.Errorf("failed to get websocket reader: %w", err)
 		}
 		if msgType != websocket.MessageBinary {
-			log.Printf("Ignoring non-binary websocket message of type %d", msgType)
+			slog.Warn("Ignoring non-binary websocket message", "type", msgType)
 			continue
 		}
 		if _, err := io.Copy(writer, reader); err != nil {

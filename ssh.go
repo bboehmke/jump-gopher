@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"text/template"
 
@@ -72,7 +72,7 @@ func (s *SSHServer) Run() error {
 func (s *SSHServer) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	ok, err := s.database.CheckPublicKeyForUserName(ctx.User(), string(gossh.MarshalAuthorizedKey(key)))
 	if err != nil {
-		log.Printf("Error checking public key for user %s: %v", ctx.User(), err)
+		slog.Error("failed to check public key", "user", ctx.User(), "error", err)
 	}
 	return ok
 }
@@ -82,7 +82,7 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 	user, err := s.database.GetUser(ses.User())
 	var accountStatus string
 	if err != nil {
-		log.Printf("Error fetching user %s from database: %v", ses.User(), err)
+		slog.Error("failed to get user from database", "user", ses.User(), "error", err)
 		accountStatus = "invalid - no access"
 	} else {
 		// Check OAuth token validity
@@ -93,7 +93,7 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 			accountStatus = "invalid - no access"
 		}
 		if err2 != nil {
-			log.Printf("Database error while checking OAuth token for user %s: %v", ses.User(), err2)
+			slog.Error("failed to update access token in database", "error", err2, "user", ses.User())
 			accountStatus = "Database error"
 		}
 	}
@@ -107,7 +107,7 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 		"permissions":    permissions,
 	})
 	if err != nil {
-		log.Printf("Error executing ssh.txt template: %v", err)
+		slog.Error("error executing ssh.txt template", "error", err)
 	}
 }
 
@@ -115,7 +115,7 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 func (s *SSHServer) checkDestination(ctx ssh.Context, destHost string, destPort uint32) bool {
 	user, err := s.database.GetUser(ctx.User())
 	if err != nil {
-		log.Printf("Error fetching user %s from database: %v", ctx.User(), err)
+		slog.Error("failed to get user from database", "user", ctx.User(), "error", err)
 		return false
 	}
 	// Check OAuth token validity
@@ -125,21 +125,21 @@ func (s *SSHServer) checkDestination(ctx ssh.Context, destHost string, destPort 
 		return false
 	}
 	if err2 != nil {
-		log.Printf("Database error while checking OAuth token for user %s: %v", ctx.User(), err2)
+		slog.Error("failed to update access token in database", "error", err2, "user", ctx.User())
 		return false
 	}
 
 	// Resolve destination host to IP addresses
 	ips, err := net.LookupIP(destHost)
 	if err != nil || len(ips) == 0 {
-		log.Printf("Error looking up IP for host %s: %v", destHost, err)
+		slog.Error("failed to resolve destination host", "host", destHost, "error", err)
 		return false
 	}
 
 	// Check permissions for each resolved IP
 	for _, ip := range ips {
 		if !s.permissions.CheckPermission(ctx.User(), ip.String()) {
-			log.Print("Permission denied for user ", ctx.User(), " to access ", ip.String())
+			slog.Warn("permission denied for user", "user", ctx.User(), "ip", ip.String())
 			return false
 		}
 	}

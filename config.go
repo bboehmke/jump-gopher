@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"reflect"
 	"strings"
@@ -90,7 +90,7 @@ func init() {
 		// check if value is empty
 		if value == "" {
 			missingConfig = true
-			log.Printf("Missing config for %s", splitTag[0])
+			slog.Error("Missing config for " + splitTag[0])
 		}
 
 		// set value in struct
@@ -105,6 +105,6 @@ func init() {
 
 	// check required fields
 	if missingConfig {
-		log.Fatal("Missing required config")
+		slog.Error("Missing required config")
 	}
 }

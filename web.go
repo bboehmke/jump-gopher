@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -67,7 +68,8 @@ func (w *Web) Run() {
 	}
 	err := server.ListenAndServe()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("failed to start web server", "error", err)
+		os.Exit(10)
 	}
 }
 
@@ -119,7 +121,7 @@ func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 		// Add the public key to the user in the database
 		err = w.database.AddPublicKeyToUser(user, name, string(gossh.MarshalAuthorizedKey(key)))
 		if err != nil {
-			log.Printf("Failed to add public key: %v", err)
+			slog.Error("failed to add public key", "user", user.Name, "error", err)
 			return errors.New("failed to add public key")
 		}
 		return nil
@@ -132,7 +134,7 @@ func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 		// Delete the public key from the database
 		err := w.database.Db.Delete(&UserPublicKeys{}, "id = ? AND user_id = ?", id, user.ID).Error
 		if err != nil {
-			log.Printf("Failed to delete public key: %v", err)
+			slog.Error("failed to delete public key", "user", user.Name, "error", err)
 			return errors.New("failed to delete public key")
 		}
 		return nil
@@ -147,7 +149,7 @@ func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 func (w *Web) handleProxy(c *gin.Context) {
 	ws, err := websocket.Accept(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Println(err)
+		slog.Error("failed to accept websocket connection", "error", err)
 		return
 	}
 	defer ws.CloseNow()
@@ -155,7 +157,7 @@ func (w *Web) handleProxy(c *gin.Context) {
 	// Connect directly to own SSH server
 	sshSocket, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", config.SshPort), time.Second*5)
 	if err != nil {
-		log.Println(err)
+		slog.Error("failed to connect to ssh server", "error", err)
 		return
 	}
 	defer sshSocket.Close()
@@ -167,7 +169,7 @@ func (w *Web) handleProxy(c *gin.Context) {
 	go func() {
 		err := lib.WsReader(ctx, ws, sshSocket)
 		if err != nil {
-			log.Printf("Websocket reader error: %v", err)
+			slog.Error("failed to read from websocket", "error", err)
 		}
 		cancel()
 	}()
@@ -175,6 +177,6 @@ func (w *Web) handleProxy(c *gin.Context) {
 	// server -> websocket
 	err = lib.WsWriter(ctx, ws, sshSocket)
 	if err != nil {
-		log.Printf("Websocket writer error: %v", err)
+		slog.Error("failed to write to websocket", "error", err)
 	}
 }

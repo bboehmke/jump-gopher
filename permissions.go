@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -14,7 +14,7 @@ import (
 
 // Permissions manages user permissions for allowed/denied addresses.
 type Permissions struct {
-	permissions map[string]*Permission // Map of user name to Permission
+	permissions map[string]*Permission // Map of username to Permission
 	mutex       sync.RWMutex
 }
 
@@ -55,7 +55,7 @@ func NewPermissions() (*Permissions, error) {
 			if stat.Size() != lastStat.Size() || stat.ModTime() != lastStat.ModTime() {
 				err := permissions.load()
 				if err != nil {
-					log.Printf("error reloading config: %v", err)
+					slog.Error("error reloading config", "error", err)
 				} else {
 					lastStat = stat
 				}
@@ -87,12 +87,12 @@ func (c *Permissions) load() error {
 	for name, perm := range conf {
 		perm.allowRegex, err = buildRegex(perm.Allow)
 		if err != nil {
-			log.Printf("%s: invalid allow regex: %v", name, err)
+			slog.Error("invalid allow regex", "user", name, "error", err)
 			failed = true
 		}
 		perm.denyRegex, err = buildRegex(perm.Deny)
 		if err != nil {
-			log.Printf("%s: invalid deny regex: %v", name, err)
+			slog.Error("invalid deny regex", "user", name, "error", err)
 			failed = true
 		}
 	}
@@ -101,7 +101,7 @@ func (c *Permissions) load() error {
 	}
 
 	c.permissions = conf
-	log.Print("config successfully loaded")
+	slog.Info("permission config successfully loaded")
 	return nil
 }
 

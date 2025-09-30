@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -50,7 +50,7 @@ func (a *Auth) CheckUserToken(user *User, c *gin.Context) (error, error) {
 		if err := a.Database.Db.Save(user).Error; err != nil {
 			return nil, err
 		}
-		log.Print("Updated user token in database")
+		slog.Debug("Updated user token in database")
 	}
 
 	return nil, nil
@@ -85,7 +85,7 @@ func (a *Auth) CheckAuth(c *gin.Context) {
 	}
 	// err2 indicates a database error which should not be shown to the user
 	if err2 != nil {
-		log.Print(err2)
+		slog.Error("failed to update access token in database", "error", err2, "user", user.Name)
 		c.Status(http.StatusInternalServerError)
 		c.Abort()
 		return
@@ -99,7 +99,7 @@ func (a *Auth) CheckAuth(c *gin.Context) {
 func (a *Auth) callback(c *gin.Context) {
 	code, ok := c.GetQuery("code")
 	if !ok {
-		c.Status(http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "Missing OAuth code in callback")
 		return
 	}
 
@@ -107,7 +107,7 @@ func (a *Auth) callback(c *gin.Context) {
 	// Exchange the code for a token
 	tok, err := conf.Exchange(c, code)
 	if err != nil {
-		log.Print(err)
+		slog.Error("token exchange failed", "error", err)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (a *Auth) callback(c *gin.Context) {
 		return []byte(conf.ClientSecret), nil
 	})
 	if err != nil {
-		log.Print(err)
+		slog.Error("failed to parse JWT token", "error", err)
 		return
 	}
 
@@ -126,12 +126,12 @@ func (a *Auth) callback(c *gin.Context) {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			user, err = a.Database.CreateUser(token.Claims.(jwt.MapClaims)["name"].(string))
 			if err != nil {
-				log.Print(err)
+				slog.Error("failed to create user", "error", err)
 				c.Status(http.StatusInternalServerError)
 				return
 			}
 		} else {
-			log.Print(err)
+			slog.Error("failed to query database", "error", err)
 			c.Status(http.StatusInternalServerError)
 			return
 		}
@@ -140,7 +140,7 @@ func (a *Auth) callback(c *gin.Context) {
 	// Generate a new session ID for the user
 	sessionID, err := generateSessionID()
 	if err != nil {
-		log.Print(err)
+		slog.Error("failed to generate session id", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return
 	}
@@ -148,7 +148,7 @@ func (a *Auth) callback(c *gin.Context) {
 	user.SessionId = sessionID
 	user.SetOAuthToken(tok)
 	if err := a.Database.Db.Save(user).Error; err != nil {
-		log.Print(err)
+		slog.Error("failed to update user in database", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return
 	}

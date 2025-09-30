@@ -9,7 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/gliderlabs/ssh"
@@ -44,7 +44,7 @@ func generateEcdsa() (any, error) {
 
 // loadHostKeys loads or generates host keys for all supported types and returns their signers.
 func loadHostKeys() ([]ssh.Signer, error) {
-	log.Printf("prepare host keys")
+	slog.Info("prepare host keys")
 	var signers []ssh.Signer
 	for keyType, generator := range keyGenerators {
 		filename := config.SshHostKeyPath + "ssh_host_" + keyType + "_key"
@@ -65,7 +65,7 @@ func loadHostKeys() ([]ssh.Signer, error) {
 // generateLoadKey loads a private key from the given filename, generating it if not present.
 func generateLoadKey(filename string, generator KeyGenerator) (any, error) {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		log.Printf("%s not found, generating new key", filename)
+		slog.Info(filename + " not found, generating new key")
 		key, err := generator()
 		if err != nil {
 			return nil, fmt.Errorf("error generating %s: %w", filename, err)
@@ -89,7 +89,7 @@ func generateLoadKey(filename string, generator KeyGenerator) (any, error) {
 		return key, nil
 	}
 
-	log.Printf("Loading %s", filename)
+	slog.Info("Loading " + filename)
 	privPem, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("error reading %s: %w", filename, err)
