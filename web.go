@@ -33,6 +33,11 @@ type Web struct {
 
 // NewWeb creates and configures a new Web instance, setting up routes and templates.
 func NewWeb(database *Database, auth *Auth, permissions *Permissions) (*Web, error) {
+	// disable debug mode if not enabled
+	if config.WebDebug != "true" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	web := &Web{
 		database:    database,
 		auth:        auth,

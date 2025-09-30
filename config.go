@@ -22,6 +22,7 @@ type Config struct {
 
 	WebPort        string `conf:"WEB_PORT,8080"`
 	WebEnableProxy string `conf:"WEB_ENABLE_PROXY,false"`
+	WebDebug       string `conf:"WEB_DEBUG,false"`
 
 	SshPort        string `conf:"SSH_PORT,2222"`
 	SshHostKeyPath string `conf:"SSH_HOST_KEY_PATH,data/"`
