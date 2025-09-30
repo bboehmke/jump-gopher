@@ -27,6 +27,7 @@ func main() {
 
 	var wsOpts websocket.DialOptions
 	if *ignoreCert {
+		// Optionally skip TLS certificate validation
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}

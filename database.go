@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// User represents an application user and their OAuth/session info.
 type User struct {
 	ID   uint `gorm:"primarykey"`
 	Name string
@@ -22,6 +23,7 @@ type User struct {
 	Expiry       time.Time
 }
 
+// OAuthToken returns the user's OAuth2 token as an oauth2.Token struct.
 func (u *User) OAuthToken() *oauth2.Token {
 	return &oauth2.Token{
 		AccessToken:  u.AccessToken,
@@ -31,6 +33,7 @@ func (u *User) OAuthToken() *oauth2.Token {
 	}
 }
 
+// SetOAuthToken updates the user's OAuth token fields from an oauth2.Token.
 func (u *User) SetOAuthToken(token *oauth2.Token) {
 	u.AccessToken = token.AccessToken
 	u.TokenType = token.TokenType
@@ -38,6 +41,7 @@ func (u *User) SetOAuthToken(token *oauth2.Token) {
 	u.Expiry = token.Expiry
 }
 
+// UserPublicKeys represents a public SSH key associated with a user.
 type UserPublicKeys struct {
 	ID        uint `gorm:"primarykey"`
 	UserId    uint
@@ -46,10 +50,12 @@ type UserPublicKeys struct {
 	PublicKey string `gorm:"uniqueIndex"`
 }
 
+// Database wraps the GORM database connection and provides user/key operations.
 type Database struct {
 	Db *gorm.DB
 }
 
+// NewDatabase initializes the database connection and migrates the schema.
 func NewDatabase() (*Database, error) {
 	db, err := gorm.Open(sqlite.Open(config.DatabaseUrl), &gorm.Config{})
 	if err != nil {
@@ -65,6 +71,7 @@ func NewDatabase() (*Database, error) {
 	return &Database{Db: db}, nil
 }
 
+// GetUserBySessionId fetches a user by their session ID.
 func (db *Database) GetUserBySessionId(sessionId string) (*User, error) {
 	var user User
 	if err := db.Db.Where("session_id = ?", sessionId).First(&user).Error; err != nil {
@@ -73,6 +80,7 @@ func (db *Database) GetUserBySessionId(sessionId string) (*User, error) {
 	return &user, nil
 }
 
+// GetUser fetches a user by their name.
 func (db *Database) GetUser(name string) (*User, error) {
 	var user User
 	if err := db.Db.Where("name = ?", name).First(&user).Error; err != nil {
@@ -81,6 +89,7 @@ func (db *Database) GetUser(name string) (*User, error) {
 	return &user, nil
 }
 
+// CreateUser creates a new user with the given name.
 func (db *Database) CreateUser(name string) (*User, error) {
 	user := &User{Name: name}
 	if err := db.Db.Create(user).Error; err != nil {
@@ -89,6 +98,7 @@ func (db *Database) CreateUser(name string) (*User, error) {
 	return user, nil
 }
 
+// GetPublicKeysOfUser returns all public keys associated with the user.
 func (db *Database) GetPublicKeysOfUser(user *User) ([]UserPublicKeys, error) {
 	var keys []UserPublicKeys
 	if err := db.Db.Where("user_id = ?", user.ID).Find(&keys).Error; err != nil {
@@ -97,6 +107,7 @@ func (db *Database) GetPublicKeysOfUser(user *User) ([]UserPublicKeys, error) {
 	return keys, nil
 }
 
+// AddPublicKeyToUser adds a new public key for the user.
 func (db *Database) AddPublicKeyToUser(user *User, name string, key string) error {
 	publicKey := &UserPublicKeys{
 		UserId:    user.ID,
@@ -106,6 +117,7 @@ func (db *Database) AddPublicKeyToUser(user *User, name string, key string) erro
 	return db.Db.Create(publicKey).Error
 }
 
+// CheckPublicKeyForUserName checks if a public key is valid for the given user name.
 func (db *Database) CheckPublicKeyForUserName(userName string, key string) (bool, error) {
 	var publicKey UserPublicKeys
 	if err := db.Db.Joins("JOIN users ON users.id = user_public_keys.user_id").

@@ -10,6 +10,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// Config holds all configuration values for the application, loaded from environment variables.
 type Config struct {
 	OAuthID       string `conf:"OAUTH_ID"`
 	OAuthSecret   string `conf:"OAUTH_SECRET"`
@@ -28,6 +29,7 @@ type Config struct {
 	PermissionsConfig string `conf:"PERMISSIONS_CONFIG,data/permissions.yml"`
 }
 
+// OAuthConfig returns an oauth2.Config for the current configuration and request context.
 func (c *Config) OAuthConfig(ctx *gin.Context) oauth2.Config {
 	conf := oauth2.Config{
 		ClientID:     c.OAuthID,

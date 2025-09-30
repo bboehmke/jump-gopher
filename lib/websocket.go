@@ -10,6 +10,8 @@ import (
 	"github.com/coder/websocket"
 )
 
+// WsReader reads binary messages from the websocket and writes them to the provided writer.
+// Returns nil on context cancel or EOF, or an error on failure.
 func WsReader(ctx context.Context, ws *websocket.Conn, writer io.Writer) error {
 	for {
 		msgType, reader, err := ws.Reader(ctx)
@@ -29,6 +31,8 @@ func WsReader(ctx context.Context, ws *websocket.Conn, writer io.Writer) error {
 	}
 }
 
+// WsWriter reads from the provided reader and writes binary messages to the websocket.
+// Returns nil on context cancel or EOF, or an error on failure.
 func WsWriter(ctx context.Context, ws *websocket.Conn, reader io.Reader) error {
 	for {
 		if ctx.Err() != nil {
@@ -48,7 +52,6 @@ func WsWriter(ctx context.Context, ws *websocket.Conn, reader io.Reader) error {
 		err = ws.Write(ctx, websocket.MessageBinary, buffer)
 		if err != nil {
 			return fmt.Errorf("failed to write to websocket: %w", err)
-
 		}
 	}
 }

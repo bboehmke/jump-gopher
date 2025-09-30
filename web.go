@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/bboehmke/jump-gopher/lib"
+	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -16,6 +21,7 @@ import (
 //go:embed templates
 var templates embed.FS
 
+// Web provides the HTTP web interface for login and key management.
 type Web struct {
 	database    *Database
 	auth        *Auth
@@ -24,6 +30,7 @@ type Web struct {
 	router *gin.Engine
 }
 
+// NewWeb creates and configures a new Web instance, setting up routes and templates.
 func NewWeb(database *Database, auth *Auth, permissions *Permissions) (*Web, error) {
 	web := &Web{
 		database:    database,
@@ -52,6 +59,7 @@ func NewWeb(database *Database, auth *Auth, permissions *Permissions) (*Web, err
 	return web, nil
 }
 
+// Run starts the HTTP server for the web interface.
 func (w *Web) Run() {
 	server := http.Server{
 		Addr:    ":" + config.WebPort,
@@ -63,11 +71,14 @@ func (w *Web) Run() {
 	}
 }
 
+// handleIndex renders the index page, showing user info, keys, and permissions.
 func (w *Web) handleIndex(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
+	// Handle POST actions (add/delete keys)
 	postError := w.handleIndexPost(c, user)
 
+	// Fetch user's public keys from the database
 	keys, err := w.database.GetPublicKeysOfUser(user)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Database error")
@@ -81,6 +92,7 @@ func (w *Web) handleIndex(c *gin.Context) {
 	})
 }
 
+// handleIndexPost processes form submissions for adding or deleting public keys.
 func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 	if c.Request.Method != http.MethodPost {
 		return nil
@@ -95,6 +107,7 @@ func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 			return errors.New("public Key is required")
 		}
 
+		// Parse and validate the SSH public key
 		key, comment, _, _, err := gossh.ParseAuthorizedKey([]byte(publicKey))
 		if err != nil {
 			return fmt.Errorf("invalid public key: %w", err)
@@ -103,6 +116,7 @@ func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 			name = comment
 		}
 
+		// Add the public key to the user in the database
 		err = w.database.AddPublicKeyToUser(user, name, string(gossh.MarshalAuthorizedKey(key)))
 		if err != nil {
 			log.Printf("Failed to add public key: %v", err)
@@ -115,6 +129,7 @@ func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 		if id == "" {
 			return errors.New("id is required")
 		}
+		// Delete the public key from the database
 		err := w.database.Db.Delete(&UserPublicKeys{}, "id = ? AND user_id = ?", id, user.ID).Error
 		if err != nil {
 			log.Printf("Failed to delete public key: %v", err)
@@ -124,5 +139,42 @@ func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 
 	} else {
 		return fmt.Errorf("invalid action: %s", action)
+	}
+}
+
+// handleProxy upgrades the HTTP connection to a websocket and proxies data between
+// the websocket and a local SSH server socket.
+func (w *Web) handleProxy(c *gin.Context) {
+	ws, err := websocket.Accept(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer ws.CloseNow()
+
+	// Connect directly to own SSH server
+	sshSocket, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", config.SshPort), time.Second*5)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer sshSocket.Close()
+
+	ctx, cancel := context.WithCancel(c)
+	defer cancel()
+
+	// websocket -> server
+	go func() {
+		err := lib.WsReader(ctx, ws, sshSocket)
+		if err != nil {
+			log.Printf("Websocket reader error: %v", err)
+		}
+		cancel()
+	}()
+
+	// server -> websocket
+	err = lib.WsWriter(ctx, ws, sshSocket)
+	if err != nil {
+		log.Printf("Websocket writer error: %v", err)
 	}
 }

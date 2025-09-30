@@ -14,30 +14,37 @@ import (
 	"gorm.io/gorm"
 )
 
+// Auth handles authentication logic and stores a reference to the database.
 type Auth struct {
-	Database *Database
+	Database *Database // Database connection used for user/session management
 }
 
+// Register sets up the authentication routes on the provided router.
 func (a *Auth) Register(router gin.IRouter) {
 	authGroup := router.Group("/auth")
 
 	authGroup.GET("/login", func(c *gin.Context) {
+		// Redirect user to OAuth provider's login page
 		conf := config.OAuthConfig(c)
 		c.Redirect(http.StatusTemporaryRedirect, conf.AuthCodeURL("state", oauth2.AccessTypeOffline))
 	})
 	authGroup.GET("/callback", a.callback)
 }
 
+// CheckUserToken verifies the user's OAuth token and updates it if necessary.
+// Returns two errors: the first for token validity, the second for database errors.
 func (a *Auth) CheckUserToken(user *User, c *gin.Context) (error, error) {
 	conf := config.OAuthConfig(c)
 	token := user.OAuthToken()
 
+	// Check token for validity and request a new token from the OAuth provider is access token is expired
 	source := conf.TokenSource(context.Background(), token)
 	tok, err := source.Token()
 	if err != nil {
 		return err, nil
 	}
 
+	// If the access token has changed, update the user record in the database
 	if tok.AccessToken != token.AccessToken {
 		user.SetOAuthToken(tok)
 		if err := a.Database.Db.Save(user).Error; err != nil {
@@ -49,10 +56,12 @@ func (a *Auth) CheckUserToken(user *User, c *gin.Context) (error, error) {
 	return nil, nil
 }
 
+// CheckAuth is a middleware that checks if the user is authenticated.
+// If not, it redirects to the login page.
 func (a *Auth) CheckAuth(c *gin.Context) {
 	sessionKey, err := c.Cookie("session_key")
 	if err != nil {
-		// no session cookie -> redirect to login
+		// No session cookie -> redirect to login
 		c.Redirect(http.StatusTemporaryRedirect, "/auth/login")
 		c.Abort()
 		return
@@ -60,16 +69,16 @@ func (a *Auth) CheckAuth(c *gin.Context) {
 
 	user, err := a.Database.GetUserBySessionId(sessionKey)
 	if err != nil {
-		// session not found -> redirect to login
+		// Session not found -> redirect to login
 		c.Redirect(http.StatusTemporaryRedirect, "/auth/login")
 		c.Abort()
 		return
 	}
 
-	// check if token is still valid
+	// Check if token is still valid
 	err, err2 := a.CheckUserToken(user, c)
 	if err != nil {
-		// session invalid -> redirect to login
+		// Session invalid -> redirect to login
 		c.Redirect(http.StatusTemporaryRedirect, "/auth/login")
 		c.Abort()
 		return
@@ -82,10 +91,11 @@ func (a *Auth) CheckAuth(c *gin.Context) {
 		return
 	}
 
-	// session found -> set user in context
+	// Session found -> set user in context for downstream handlers
 	c.Set("user", user)
 }
 
+// callback handles the OAuth provider's callback and creates the user session.
 func (a *Auth) callback(c *gin.Context) {
 	code, ok := c.GetQuery("code")
 	if !ok {
@@ -94,12 +104,14 @@ func (a *Auth) callback(c *gin.Context) {
 	}
 
 	conf := config.OAuthConfig(c)
+	// Exchange the code for a token
 	tok, err := conf.Exchange(c, code)
 	if err != nil {
 		log.Print(err)
 		return
 	}
 
+	// Parse the JWT token to extract user information
 	token, err := jwt.Parse(tok.AccessToken, func(token *jwt.Token) (interface{}, error) {
 		return []byte(conf.ClientSecret), nil
 	})
@@ -108,6 +120,7 @@ func (a *Auth) callback(c *gin.Context) {
 		return
 	}
 
+	// Try to get the user from the database, create if not found
 	user, err := a.Database.GetUser(token.Claims.(jwt.MapClaims)["name"].(string))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -124,6 +137,7 @@ func (a *Auth) callback(c *gin.Context) {
 		}
 	}
 
+	// Generate a new session ID for the user
 	sessionID, err := generateSessionID()
 	if err != nil {
 		log.Print(err)
@@ -139,6 +153,7 @@ func (a *Auth) callback(c *gin.Context) {
 		return
 	}
 
+	// Set session cookie and redirect to home
 	c.SetCookie("session_key", sessionID, 60*60*24, "/", "", false, true)
 	c.Redirect(http.StatusTemporaryRedirect, "/")
 }

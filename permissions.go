@@ -12,19 +12,23 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
+// Permissions manages user permissions for allowed/denied addresses.
 type Permissions struct {
-	permissions map[string]*Permission
+	permissions map[string]*Permission // Map of user name to Permission
 	mutex       sync.RWMutex
 }
 
+// Permission defines allowed and denied address patterns for a user.
 type Permission struct {
 	Allow []string
 	Deny  []string
 
+	// compiled regexes for performance
 	allowRegex *regexp.Regexp
 	denyRegex  *regexp.Regexp
 }
 
+// NewPermissions loads permissions from config and starts a watcher for changes.
 func NewPermissions() (*Permissions, error) {
 	permissions := &Permissions{}
 
@@ -47,6 +51,7 @@ func NewPermissions() (*Permissions, error) {
 				continue
 			}
 
+			// reload if size or modification time changed
 			if stat.Size() != lastStat.Size() || stat.ModTime() != lastStat.ModTime() {
 				err := permissions.load()
 				if err != nil {
@@ -61,6 +66,7 @@ func NewPermissions() (*Permissions, error) {
 	return permissions, nil
 }
 
+// load reads and parses the permissions config file, compiling regexes.
 func (c *Permissions) load() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -99,6 +105,7 @@ func (c *Permissions) load() error {
 	return nil
 }
 
+// buildRegex compiles a regex from a list of patterns.
 func buildRegex(patterns []string) (*regexp.Regexp, error) {
 	if len(patterns) == 0 {
 		return nil, nil
@@ -111,6 +118,7 @@ func buildRegex(patterns []string) (*regexp.Regexp, error) {
 	return compile, nil
 }
 
+// CheckPermission returns true if the user is allowed to access the given address.
 func (c *Permissions) CheckPermission(name, addr string) bool {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
@@ -128,6 +136,7 @@ func (c *Permissions) CheckPermission(name, addr string) bool {
 	return false
 }
 
+// GetUserPermissions returns the Permission for the given user name.
 func (c *Permissions) GetUserPermissions(name string) *Permission {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()

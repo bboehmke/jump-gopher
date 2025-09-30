@@ -10,6 +10,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
+// SSHServer provides the SSH proxy server, handling authentication and permissions.
 type SSHServer struct {
 	database    *Database
 	auth        *Auth
@@ -20,6 +21,7 @@ type SSHServer struct {
 	tpl *template.Template
 }
 
+// NewSSHServer creates and configures a new SSHServer instance.
 func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SSHServer, error) {
 	sshServer := SSHServer{
 		database:    database,
@@ -61,10 +63,12 @@ func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SS
 	return &sshServer, nil
 }
 
+// Run starts the SSH server and listens for incoming connections.
 func (s *SSHServer) Run() error {
 	return s.server.ListenAndServe()
 }
 
+// publicKeyHandler checks if the provided public key is valid for the given user.
 func (s *SSHServer) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	ok, err := s.database.CheckPublicKeyForUserName(ctx.User(), string(gossh.MarshalAuthorizedKey(key)))
 	if err != nil {
@@ -73,6 +77,7 @@ func (s *SSHServer) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	return ok
 }
 
+// sessionHandler handles an SSH session, displaying account status and permissions.
 func (s *SSHServer) sessionHandler(ses ssh.Session) {
 	user, err := s.database.GetUser(ses.User())
 	var accountStatus string
@@ -80,6 +85,7 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 		log.Printf("Error fetching user %s from database: %v", ses.User(), err)
 		accountStatus = "invalid - no access"
 	} else {
+		// Check OAuth token validity
 		err, err2 := s.auth.CheckUserToken(user, nil)
 		accountStatus = "valid"
 		if err != nil {
@@ -94,6 +100,7 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 
 	permissions := s.permissions.GetUserPermissions(ses.User())
 
+	// Render SSH session message using template
 	err = s.tpl.ExecuteTemplate(ses, "ssh.txt", map[string]any{
 		"user_name":      ses.User(),
 		"account_status": accountStatus,
@@ -104,12 +111,14 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 	}
 }
 
+// checkDestination validates if the user is allowed to forward to the given destination.
 func (s *SSHServer) checkDestination(ctx ssh.Context, destHost string, destPort uint32) bool {
 	user, err := s.database.GetUser(ctx.User())
 	if err != nil {
 		log.Printf("Error fetching user %s from database: %v", ctx.User(), err)
 		return false
 	}
+	// Check OAuth token validity
 	err, err2 := s.auth.CheckUserToken(user, nil)
 	if err != nil {
 		// token invalid
@@ -120,12 +129,14 @@ func (s *SSHServer) checkDestination(ctx ssh.Context, destHost string, destPort 
 		return false
 	}
 
+	// Resolve destination host to IP addresses
 	ips, err := net.LookupIP(destHost)
 	if err != nil || len(ips) == 0 {
 		log.Printf("Error looking up IP for host %s: %v", destHost, err)
 		return false
 	}
 
+	// Check permissions for each resolved IP
 	for _, ip := range ips {
 		if !s.permissions.CheckPermission(ctx.User(), ip.String()) {
 			log.Print("Permission denied for user ", ctx.User(), " to access ", ip.String())
