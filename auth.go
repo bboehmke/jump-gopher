@@ -69,7 +69,8 @@ func (a *Auth) CheckAuth(c *gin.Context) {
 	// check if token is still valid
 	err, err2 := a.CheckUserToken(user, c)
 	if err != nil {
-		c.String(http.StatusUnauthorized, err.Error())
+		// session invalid -> redirect to login
+		c.Redirect(http.StatusTemporaryRedirect, "/auth/login")
 		c.Abort()
 		return
 	}

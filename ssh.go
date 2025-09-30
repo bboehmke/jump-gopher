@@ -83,7 +83,7 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 		err, err2 := s.auth.CheckUserToken(user, nil)
 		accountStatus = "valid"
 		if err != nil {
-			log.Printf("Error checking OAuth token for user %s: %v", ses.User(), err)
+			// invalid token
 			accountStatus = "invalid - no access"
 		}
 		if err2 != nil {
@@ -112,7 +112,7 @@ func (s *SSHServer) checkDestination(ctx ssh.Context, destHost string, destPort 
 	}
 	err, err2 := s.auth.CheckUserToken(user, nil)
 	if err != nil {
-		log.Printf("Error checking OAuth token for user %s: %v", ctx.User(), err)
+		// token invalid
 		return false
 	}
 	if err2 != nil {
