@@ -71,3 +71,21 @@ username2:
 - If an address matches any `deny` pattern, access is denied.
 - If an address matches any `allow` pattern and not denied, access is allowed.
 - If neither matches, access is denied.
+
+## Security Overview
+
+Jump Gopher is designed with a strong security model:
+
+- **User Accounts:**  
+  - Managed via OAuth2 (e.g., Google, Microsoft, etc.)
+  - OAuth tokens are verified on *every* web request and *every* SSH connection.
+  - Expired access tokens are automatically renewed using the refresh token.
+
+- **Permissions:**  
+  - Managed per user in a YAML config file (`permissions.yml`).
+  - Only users listed in the config file can connect; unknown users are denied access to all hosts.
+  - Permissions are enforced for every SSH forwarding request.
+
+- **SSH Authentication:**  
+  - SSH sessions require public key authentication.
+  - Only public keys added by the user via the web interface are accepted for SSH login.
