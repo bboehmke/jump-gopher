@@ -74,7 +74,7 @@ func NewDatabase() (*Database, error) {
 // GetUserBySessionId fetches a user by their session ID.
 func (db *Database) GetUserBySessionId(sessionId string) (*User, error) {
 	var user User
-	if err := db.Db.Where("session_id = ?", sessionId).First(&user).Error; err != nil {
+	if err := db.Db.Where("session_id = ?", sessionId).Limit(1).Find(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -83,7 +83,7 @@ func (db *Database) GetUserBySessionId(sessionId string) (*User, error) {
 // GetUser fetches a user by their name.
 func (db *Database) GetUser(name string) (*User, error) {
 	var user User
-	if err := db.Db.Where("name = ?", name).First(&user).Error; err != nil {
+	if err := db.Db.Where("name = ?", name).Limit(1).Find(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -122,7 +122,7 @@ func (db *Database) CheckPublicKeyForUserName(userName string, key string) (bool
 	var publicKey UserPublicKeys
 	if err := db.Db.Joins("JOIN users ON users.id = user_public_keys.user_id").
 		Where("users.name = ? AND user_public_keys.public_key = ?", userName, key).
-		First(&publicKey).Error; err != nil {
+		Limit(1).Find(&publicKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, nil
 		}
