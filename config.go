@@ -72,6 +72,12 @@ func init() {
 		if !ok {
 			continue
 		}
+
+		// ignore oauth config in check mode
+		if *checkConfig && strings.HasPrefix(strings.ToLower(tag), "oauth_") {
+			continue
+		}
+
 		splitTag := strings.Split(tag, ",")
 
 		// check if default value exists

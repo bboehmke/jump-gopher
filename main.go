@@ -1,16 +1,29 @@
 package main
 
 import (
+	"flag"
 	"log/slog"
 	"os"
 )
 
+var checkConfig = flag.Bool("check_config", false, "Skip certificate validation")
+
 func main() {
-	slog.Info("Starting jump-gopher server")
+	flag.Parse()
+	if *checkConfig {
+		slog.Info("Check permissions config")
+	} else {
+		slog.Info("Starting jump-gopher server")
+	}
+
 	permissions, err := NewPermissions()
 	if err != nil {
 		slog.Error("Failed to load permissions", "error", err)
 		os.Exit(1)
+	}
+
+	if *checkConfig {
+		os.Exit(0)
 	}
 
 	database, err := NewDatabase()
