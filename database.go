@@ -2,11 +2,12 @@ package main
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
 	"golang.org/x/oauth2"
-	_ "gorm.io/driver/postgres"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -57,7 +58,19 @@ type Database struct {
 
 // NewDatabase initializes the database connection and migrates the schema.
 func NewDatabase() (*Database, error) {
-	db, err := gorm.Open(sqlite.Open(config.DatabaseUrl), &gorm.Config{})
+	// select database driver based on DSN prefix
+	var conn gorm.Dialector
+	switch strings.Split(strings.ToLower(config.DatabaseUrl), ":")[0] {
+	case "file":
+		conn = sqlite.Open(config.DatabaseUrl)
+	case "postgres":
+		conn = postgres.Open(config.DatabaseUrl)
+	default:
+		return nil, errors.New("unsupported database type, only sqlite and postgres are supported")
+	}
+
+	// open database connection
+	db, err := gorm.Open(conn, &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}

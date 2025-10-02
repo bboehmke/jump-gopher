@@ -12,7 +12,8 @@ Jump Gopher is a simple SSH jump/proxy server supporting fine-grained permission
 
 ## Configuration
 
-The application is configured via environment variables. The following table lists all available variables, their descriptions and default values.
+The application is configured via environment variables. The following table 
+lists all available variables, their descriptions and default values.
 
 | Variable Name        | Description                         | Default Value                         |
 |----------------------|-------------------------------------|---------------------------------------|
@@ -30,6 +31,14 @@ The application is configured via environment variables. The following table lis
 | `PERMISSIONS_CONFIG` | Path to permissions YAML config     | `data/permissions.yml`                |
 
 **Note:** If a variable has no default value, it must be set explicitly.
+
+### `DATABASE_URL`
+
+The database connection string supports SQLite (`file`) and PostgreSQL. 
+By default, it uses a SQLite database stored in `data/data.db`.
+
+To use PostgreSQL, set the `DATABASE_URL` to a valid PostgreSQL connection string like 
+`postgres://user:password@localhost:5432/dbname`.
 
 ## Permissions YAML Format
 
