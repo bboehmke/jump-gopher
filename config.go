@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log/slog"
 	"os"
 	"reflect"
@@ -9,6 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/oauth2"
 )
+
+var checkConfig = flag.Bool("check_config", false, "Skip certificate validation")
 
 // Config holds all configuration values for the application, loaded from environment variables.
 type Config struct {
@@ -59,6 +62,8 @@ func (c *Config) OAuthConfig(ctx *gin.Context) oauth2.Config {
 var config Config
 
 func init() {
+	flag.Parse()
+
 	// load config from env
 	st := reflect.ValueOf(&config).Elem()
 

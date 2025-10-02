@@ -1,15 +1,11 @@
 package main
 
 import (
-	"flag"
 	"log/slog"
 	"os"
 )
 
-var checkConfig = flag.Bool("check_config", false, "Skip certificate validation")
-
 func main() {
-	flag.Parse()
 	if *checkConfig {
 		slog.Info("Check permissions config")
 	} else {
