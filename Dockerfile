@@ -14,6 +14,6 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 EXPOSE 8080
 EXPOSE 2222
 VOLUME ["/data"]
-WORKDIR "/data"
+WORKDIR "/"
 
 ENTRYPOINT ["/jump-gopher"]
