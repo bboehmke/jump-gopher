@@ -15,11 +15,12 @@ var checkConfig = flag.Bool("check_config", false, "Skip certificate validation"
 
 // Config holds all configuration values for the application, loaded from environment variables.
 type Config struct {
-	OAuthID       string `conf:"OAUTH_ID"`
-	OAuthSecret   string `conf:"OAUTH_SECRET"`
-	OAuthScopes   string `conf:"OAUTH_SCOPES,email;openid;profile;offline_access"`
-	OAuthAuthURL  string `conf:"OAUTH_AUTH_URL"`
-	OAuthTokenURL string `conf:"OAUTH_TOKEN_URL"`
+	OAuthID            string `conf:"OAUTH_ID"`
+	OAuthSecret        string `conf:"OAUTH_SECRET"`
+	OAuthScopes        string `conf:"OAUTH_SCOPES,email;openid;profile;offline_access"`
+	OAuthAuthURL       string `conf:"OAUTH_AUTH_URL"`
+	OAuthTokenURL      string `conf:"OAUTH_TOKEN_URL"`
+	OAuthUsernameClaim string `conf:"OAUTH_USERNAME_CLAIM,preferred_username"`
 
 	DatabaseUrl string `conf:"DATABASE_URL,file:data/data.db"`
 

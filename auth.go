@@ -121,17 +121,24 @@ func (a *Auth) callback(c *gin.Context) {
 	}
 
 	// Try to get the user from the database, create if not found
-	user, err := a.Database.GetUser(token.Claims.(jwt.MapClaims)["name"].(string))
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			user, err = a.Database.CreateUser(token.Claims.(jwt.MapClaims)["name"].(string))
-			if err != nil {
-				slog.Error("failed to create user", "error", err)
-				c.Status(http.StatusInternalServerError)
-				return
-			}
-		} else {
-			slog.Error("failed to query database", "error", err)
+	username, ok := token.Claims.(jwt.MapClaims)[config.OAuthUsernameClaim].(string)
+	if !ok {
+		slog.Error("failed to extract username from token")
+		return
+	}
+
+	user, err := a.Database.GetUser(username)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		slog.Error("failed to query database", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	// create new user if not exist
+	if user.Name == "" {
+		user, err = a.Database.CreateUser(username)
+		if err != nil {
+			slog.Error("failed to create user", "error", err)
 			c.Status(http.StatusInternalServerError)
 			return
 		}

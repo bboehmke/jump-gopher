@@ -15,20 +15,21 @@ Jump Gopher is a simple SSH jump/proxy server supporting fine-grained permission
 The application is configured via environment variables. The following table 
 lists all available variables, their descriptions and default values.
 
-| Variable Name        | Description                         | Default Value                         |
-|----------------------|-------------------------------------|---------------------------------------|
-| `OAUTH_ID`           | OAuth2 client ID                    |                                       |
-| `OAUTH_SECRET`       | OAuth2 client secret                |                                       |
-| `OAUTH_SCOPES`       | OAuth2 scopes (comma separated)     | `email,openid,profile,offline_access` |
-| `OAUTH_AUTH_URL`     | OAuth2 authorization URL            |                                       |
-| `OAUTH_TOKEN_URL`    | OAuth2 token URL                    |                                       |
-| `DATABASE_URL`       | Database connection string          | `file:data/data.db`                   |
-| `WEB_PORT`           | Port for the web server             | `8080`                                |
-| `WEB_ENABLE_PROXY`   | Enable web SSH proxy                | `false`                               |
-| `WEB_DEBUG`          | Enable debug logging for web server | `false`                               |
-| `SSH_PORT`           | Port for the SSH server             | `2222`                                |
-| `SSH_HOST_KEY_PATH`  | Path to SSH host keys               | `data/`                               |
-| `PERMISSIONS_CONFIG` | Path to permissions YAML config     | `data/permissions.yml`                |
+| Variable Name          | Description                         | Default Value                         |
+|------------------------|-------------------------------------|---------------------------------------|
+| `OAUTH_ID`             | OAuth2 client ID                    |                                       |
+| `OAUTH_SECRET`         | OAuth2 client secret                |                                       |
+| `OAUTH_SCOPES`         | OAuth2 scopes (comma separated)     | `email,openid,profile,offline_access` |
+| `OAUTH_AUTH_URL`       | OAuth2 authorization URL            |                                       |
+| `OAUTH_TOKEN_URL`      | OAuth2 token URL                    |                                       |
+| `OAUTH_USERNAME_CLAIM` | OAuth2 claim for user name          | `preferred_username`                  |
+| `DATABASE_URL`         | Database connection string          | `file:data/data.db`                   |
+| `WEB_PORT`             | Port for the web server             | `8080`                                |
+| `WEB_ENABLE_PROXY`     | Enable web SSH proxy                | `false`                               |
+| `WEB_DEBUG`            | Enable debug logging for web server | `false`                               |
+| `SSH_PORT`             | Port for the SSH server             | `2222`                                |
+| `SSH_HOST_KEY_PATH`    | Path to SSH host keys               | `data/`                               |
+| `PERMISSIONS_CONFIG`   | Path to permissions YAML config     | `data/permissions.yml`                |
 
 **Note:** If a variable has no default value, it must be set explicitly.
 
