@@ -6,6 +6,8 @@ import (
 )
 
 func main() {
+	initConfig()
+
 	if *checkConfig {
 		slog.Info("Check permissions config")
 	} else {

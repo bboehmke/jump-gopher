@@ -62,7 +62,7 @@ func (c *Config) OAuthConfig(ctx *gin.Context) oauth2.Config {
 
 var config Config
 
-func init() {
+func initConfig() {
 	flag.Parse()
 
 	// load config from env
