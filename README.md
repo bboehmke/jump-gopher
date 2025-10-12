@@ -9,6 +9,7 @@ Jump Gopher is a simple SSH jump/proxy server supporting fine-grained permission
 - Per user permission management via YAML configuration supporting dynamic reloading
 - Integrated SSH server that only supports forwarding
 - Optional websocket proxy for SSH connections
+- Prometheus metrics
 
 ## Configuration
 

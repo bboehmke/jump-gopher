@@ -16,6 +16,7 @@ import (
 	"github.com/bboehmke/jump-gopher/lib"
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -51,7 +52,12 @@ func NewWeb(database *Database, auth *Auth, permissions *Permissions) (*Web, err
 		return nil, fmt.Errorf("error parsing templates: %w", err)
 	}
 
-	web.router.Use(gin.Logger(), gin.Recovery())
+	web.router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
+		SkipPaths: []string{
+			"/metrics",
+			"/favicon.ico",
+		},
+	}), gin.Recovery())
 	web.router.SetHTMLTemplate(tpl)
 
 	auth.Register(web.router)
@@ -62,6 +68,8 @@ func NewWeb(database *Database, auth *Auth, permissions *Permissions) (*Web, err
 	if strings.ToLower(config.WebEnableProxy) == "true" {
 		web.router.GET("/proxy", web.handleProxy)
 	}
+
+	web.router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	return web, nil
 }
 

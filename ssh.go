@@ -47,7 +47,7 @@ func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SS
 		PublicKeyHandler: sshServer.publicKeyHandler,
 		HostSigners:      signers,
 		ChannelHandlers: map[string]ssh.ChannelHandler{
-			"direct-tcpip": ssh.DirectTCPIPHandler,
+			"direct-tcpip": DirectTCPIPHandler,
 			"session":      ssh.DefaultSessionHandler,
 		},
 		LocalPortForwardingCallback: sshServer.checkDestination,
@@ -66,6 +66,15 @@ func (s *SSHServer) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	ok, err := s.database.CheckPublicKeyForUserName(ctx.User(), string(gossh.MarshalAuthorizedKey(key)))
 	if err != nil {
 		slog.Error("failed to check public key", "user", ctx.User(), "error", err)
+	}
+
+	// track active connections
+	if ok {
+		mActiveConnections.WithLabelValues(ctx.User()).Inc()
+		go func() {
+			<-ctx.Done()
+			mActiveConnections.WithLabelValues(ctx.User()).Dec()
+		}()
 	}
 	return ok
 }
