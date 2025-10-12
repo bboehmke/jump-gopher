@@ -91,11 +91,15 @@ func (w *Web) handleIndex(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Database error")
 		return
 	}
+
+	host := strings.Split(c.Request.Host, ":")[0]
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"user_name":   c.MustGet("user").(*User).Name,
 		"keys":        keys,
 		"permissions": w.permissions.GetUserPermissions(user.Name),
 		"error":       postError,
+		"host":        host,
+		"port":        config.SshPort,
 	})
 }
 

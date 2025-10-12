@@ -69,5 +69,32 @@
         {{ end }}
     </ul>
 
+
+    <br/>
+    <br/>
+    <h3>Config Example</h3>
+    <h4>Jump host configuration</h4>
+    Add the following to <code>~/.ssh/config</code> file:
+    <hr/>
+    <pre>
+Host jump-gopher
+    HostName {{ .host }}
+    User {{ .user_name }}
+    Port {{ .port }}</pre>
+    <hr/>
+    <h4>SSH config for target hosts</h4>
+    Add the following to <code>~/.ssh/config</code> file:
+    <hr/>
+    <pre>
+Host somehost
+    HostName somehost.example.com
+    ProxyJump jump-gopher</pre>
+    <hr/>
+    <h4>SSH jump via command</h4>
+    Use the following command to connect to target host via jump host:
+    <hr/>
+    <pre>
+ssh -J jump-gopher somehost.example.com</pre>
+    <hr/>
 </body>
 </html>
