@@ -40,24 +40,17 @@ func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SS
 		return nil, fmt.Errorf("error loading host keys: %w", err)
 	}
 
-	forwardHandler := &ssh.ForwardedTCPHandler{}
-
 	sshServer.server = &ssh.Server{
 		Version:          "JumpGopher SSH Proxy 0.0",
 		Addr:             ":" + config.SshPort,
 		Handler:          sshServer.sessionHandler,
 		PublicKeyHandler: sshServer.publicKeyHandler,
 		HostSigners:      signers,
-		RequestHandlers: map[string]ssh.RequestHandler{
-			"tcpip-forward":        forwardHandler.HandleSSHRequest,
-			"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
-		},
 		ChannelHandlers: map[string]ssh.ChannelHandler{
 			"direct-tcpip": ssh.DirectTCPIPHandler,
 			"session":      ssh.DefaultSessionHandler,
 		},
-		LocalPortForwardingCallback:   sshServer.checkDestination,
-		ReversePortForwardingCallback: sshServer.checkDestination,
+		LocalPortForwardingCallback: sshServer.checkDestination,
 	}
 
 	return &sshServer, nil
