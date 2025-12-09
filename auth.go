@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"log/slog"
@@ -17,17 +17,25 @@ import (
 // Auth handles authentication logic and stores a reference to the database.
 type Auth struct {
 	Database *Database // Database connection used for user/session management
+
+	StateEncryptionKey [32]byte // Key used to encrypt OAuth state parameter
+}
+
+// NewAuth creates a new Auth instance with the provided database connection.
+func NewAuth(db *Database) *Auth {
+	return &Auth{
+		Database: db,
+
+		// Derive encryption key from OAuth secret
+		StateEncryptionKey: sha256.Sum256([]byte(config.OAuthSecret)),
+	}
 }
 
 // Register sets up the authentication routes on the provided router.
 func (a *Auth) Register(router gin.IRouter) {
 	authGroup := router.Group("/auth")
 
-	authGroup.GET("/login", func(c *gin.Context) {
-		// Redirect user to OAuth provider's login page
-		conf := config.OAuthConfig(c)
-		c.Redirect(http.StatusTemporaryRedirect, conf.AuthCodeURL("state", oauth2.AccessTypeOffline))
-	})
+	authGroup.GET("/login", a.login)
 	authGroup.GET("/callback", a.callback)
 }
 
@@ -95,8 +103,64 @@ func (a *Auth) CheckAuth(c *gin.Context) {
 	c.Set("user", user)
 }
 
+// login initiates the OAuth login process by redirecting to the provider's login page.
+func (a *Auth) login(c *gin.Context) {
+	// generate random state parameter
+	stateBytes, err := generateRandom()
+	if err != nil {
+		slog.Error("failed to generate random state", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	// store encrypted state in cookie
+	encryptedStateBytes, err := encrypt(stateBytes, a.StateEncryptionKey[:])
+	if err != nil {
+		slog.Error("failed to encrypt state", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	c.SetCookie("oauth_state", hex.EncodeToString(encryptedStateBytes), 300, "/", "", false, true)
+
+	// Redirect user to OAuth provider's login page
+	conf := config.OAuthConfig(c)
+	c.Redirect(http.StatusTemporaryRedirect, conf.AuthCodeURL(hex.EncodeToString(stateBytes), oauth2.AccessTypeOffline))
+}
+
 // callback handles the OAuth provider's callback and creates the user session.
 func (a *Auth) callback(c *gin.Context) {
+	state, ok := c.GetQuery("state")
+	if !ok {
+		c.String(http.StatusBadRequest, "Missing OAuth state in callback")
+		return
+	}
+
+	// retrieve and decrypt state from cookie
+	encryptedStateHex, err := c.Cookie("oauth_state")
+	if err != nil {
+		c.String(http.StatusBadRequest, "Missing OAuth state cookie in callback")
+		return
+	}
+	encryptedStateBytes, err := hex.DecodeString(encryptedStateHex)
+	if err != nil {
+		slog.Error("failed to decode encrypted state", "error", err)
+		c.String(http.StatusBadRequest, "Invalid OAuth state cookie in callback")
+		return
+	}
+	decryptedStateBytes, err := decrypt(encryptedStateBytes, a.StateEncryptionKey[:])
+	if err != nil {
+		slog.Error("failed to decrypt state", "error", err)
+		c.String(http.StatusBadRequest, "Invalid OAuth state cookie in callback")
+		return
+	}
+
+	// compare state parameters
+	if state != hex.EncodeToString(decryptedStateBytes) {
+		c.String(http.StatusBadRequest, "Invalid OAuth state in callback")
+		return
+	}
+
+	// get code from query
 	code, ok := c.GetQuery("code")
 	if !ok {
 		c.String(http.StatusBadRequest, "Missing OAuth code in callback")
@@ -163,14 +227,4 @@ func (a *Auth) callback(c *gin.Context) {
 	// Set session cookie and redirect to home
 	c.SetCookie("session_key", sessionID, 60*60*24, "/", "", false, true)
 	c.Redirect(http.StatusTemporaryRedirect, "/")
-}
-
-// generateSessionID generates a random session ID of 128 characters (64 bytes).
-func generateSessionID() (string, error) {
-	bytes := make([]byte, 64)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
 }

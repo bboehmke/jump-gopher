@@ -30,7 +30,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	auth := &Auth{Database: database}
+	auth := NewAuth(database)
 
 	web, err := NewWeb(database, auth, permissions)
 	if err != nil {
