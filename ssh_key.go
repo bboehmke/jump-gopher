@@ -45,10 +45,16 @@ func generateEcdsa() (any, error) {
 // loadHostKeys loads or generates host keys for all supported types and returns their signers.
 func loadHostKeys() ([]ssh.Signer, error) {
 	slog.Info("prepare host keys")
+	keyRoot, err := os.OpenRoot(config.SshHostKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open key path: %w", err)
+	}
+	defer keyRoot.Close()
+
 	var signers []ssh.Signer
 	for keyType, generator := range keyGenerators {
-		filename := config.SshHostKeyPath + "ssh_host_" + keyType + "_key"
-		key, err := generateLoadKey(filename, generator)
+		filename := "ssh_host_" + keyType + "_key"
+		key, err := generateLoadKey(keyRoot, filename, generator)
 		if err != nil {
 			return nil, fmt.Errorf("error loading %s: %w", filename, err)
 		}
@@ -63,8 +69,8 @@ func loadHostKeys() ([]ssh.Signer, error) {
 }
 
 // generateLoadKey loads a private key from the given filename, generating it if not present.
-func generateLoadKey(filename string, generator KeyGenerator) (any, error) {
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
+func generateLoadKey(keyRoot *os.Root, filename string, generator KeyGenerator) (any, error) {
+	if _, err := keyRoot.Stat(filename); os.IsNotExist(err) {
 		slog.Info(filename + " not found, generating new key")
 		key, err := generator()
 		if err != nil {
@@ -76,21 +82,24 @@ func generateLoadKey(filename string, generator KeyGenerator) (any, error) {
 			return nil, fmt.Errorf("error marshalling %s: %w", filename, err)
 		}
 
-		file, err := os.Create(filename)
+		file, err := keyRoot.Create(filename)
 		if err != nil {
 			return nil, fmt.Errorf("error creating %s: %w", filename, err)
 		}
 		defer file.Close()
 
-		pem.Encode(file, &pem.Block{
+		err = pem.Encode(file, &pem.Block{
 			Type:  "PRIVATE KEY",
 			Bytes: privBytes,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("error encoding private key %s: %w", filename, err)
+		}
 		return key, nil
 	}
 
 	slog.Info("Loading " + filename)
-	privPem, err := os.ReadFile(filename)
+	privPem, err := keyRoot.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("error reading %s: %w", filename, err)
 	}

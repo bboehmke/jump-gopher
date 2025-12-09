@@ -27,7 +27,7 @@ type localForwardChannelData struct {
 func (s *SSHServer) directTCPIPHandler(_ *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
 	d := localForwardChannelData{}
 	if err := gossh.Unmarshal(newChan.ExtraData(), &d); err != nil {
-		newChan.Reject(gossh.ConnectionFailed, "error parsing forward data: "+err.Error())
+		_ = newChan.Reject(gossh.ConnectionFailed, "error parsing forward data: "+err.Error())
 		return
 	}
 
@@ -35,23 +35,23 @@ func (s *SSHServer) directTCPIPHandler(_ *ssh.Server, conn *gossh.ServerConn, ne
 	user, err := s.database.GetUser(ctx.User())
 	if err != nil {
 		slog.Error("failed to get user from database", "user", ctx.User(), "error", err)
-		newChan.Reject(gossh.ConnectionFailed, "failed to get user from database")
+		_ = newChan.Reject(gossh.ConnectionFailed, "failed to get user from database")
 		return
 	}
 	if user.ID == 0 {
-		newChan.Reject(gossh.Prohibited, "unknown user")
+		_ = newChan.Reject(gossh.Prohibited, "unknown user")
 		return
 	}
 
 	// Check OAuth token validity
 	err, err2 := s.auth.CheckUserToken(user, nil)
 	if err != nil {
-		newChan.Reject(gossh.Prohibited, "invalid/expired auth token > login on web interface")
+		_ = newChan.Reject(gossh.Prohibited, "invalid/expired auth token > login on web interface")
 		return
 	}
 	if err2 != nil {
 		slog.Error("failed to update access token in database", "error", err2, "user", ctx.User())
-		newChan.Reject(gossh.ConnectionFailed, "failed to update access token")
+		_ = newChan.Reject(gossh.ConnectionFailed, "failed to update access token")
 		return
 	}
 
@@ -59,7 +59,7 @@ func (s *SSHServer) directTCPIPHandler(_ *ssh.Server, conn *gossh.ServerConn, ne
 	ips, err := net.LookupIP(d.DestAddr)
 	if err != nil || len(ips) == 0 {
 		slog.Error("failed to resolve destination host", "host", d.DestAddr, "error", err)
-		newChan.Reject(gossh.ConnectionFailed, "failed to resolve destination host "+d.DestAddr)
+		_ = newChan.Reject(gossh.ConnectionFailed, "failed to resolve destination host "+d.DestAddr)
 		return
 	}
 
@@ -67,7 +67,7 @@ func (s *SSHServer) directTCPIPHandler(_ *ssh.Server, conn *gossh.ServerConn, ne
 	for _, ip := range ips {
 		if !s.permissions.CheckPermission(ctx.User(), ip.String()) {
 			slog.Warn("permission denied for user", "user", ctx.User(), "ip", ip.String())
-			newChan.Reject(gossh.Prohibited, "permission denied for "+ip.String())
+			_ = newChan.Reject(gossh.Prohibited, "permission denied for "+ip.String())
 			return
 		}
 	}
@@ -77,13 +77,13 @@ func (s *SSHServer) directTCPIPHandler(_ *ssh.Server, conn *gossh.ServerConn, ne
 	var dialer net.Dialer
 	dconn, err := dialer.DialContext(ctx, "tcp", dest)
 	if err != nil {
-		newChan.Reject(gossh.ConnectionFailed, err.Error())
+		_ = newChan.Reject(gossh.ConnectionFailed, err.Error())
 		return
 	}
 
 	ch, reqs, err := newChan.Accept()
 	if err != nil {
-		dconn.Close()
+		_ = dconn.Close()
 		return
 	}
 	go gossh.DiscardRequests(reqs)
@@ -92,12 +92,12 @@ func (s *SSHServer) directTCPIPHandler(_ *ssh.Server, conn *gossh.ServerConn, ne
 		defer ch.Close()
 		defer dconn.Close()
 
-		io.Copy(ch, handleMetric(dconn, mDataReceived, conn.User()))
+		_, _ = io.Copy(ch, handleMetric(dconn, mDataReceived, conn.User()))
 	}()
 	go func() {
 		defer ch.Close()
 		defer dconn.Close()
 
-		io.Copy(dconn, handleMetric(ch, mDataSend, conn.User()))
+		_, _ = io.Copy(dconn, handleMetric(ch, mDataSend, conn.User()))
 	}()
 }

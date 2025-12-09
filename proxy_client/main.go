@@ -29,7 +29,7 @@ func main() {
 	if *ignoreCert {
 		// Optionally skip TLS certificate validation
 		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402
 		}
 		wsOpts.HTTPClient = &http.Client{Transport: tr}
 	}

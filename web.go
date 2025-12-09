@@ -76,8 +76,9 @@ func NewWeb(database *Database, auth *Auth, permissions *Permissions) (*Web, err
 // Run starts the HTTP server for the web interface.
 func (w *Web) Run() {
 	server := http.Server{
-		Addr:    ":" + config.WebPort,
-		Handler: w.router,
+		Addr:              ":" + config.WebPort,
+		Handler:           w.router,
+		ReadHeaderTimeout: time.Second * 5,
 	}
 	err := server.ListenAndServe()
 	if err != nil {
