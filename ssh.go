@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log/slog"
-	"net"
 	"text/template"
 
 	"github.com/gliderlabs/ssh"
@@ -47,10 +46,9 @@ func NewSSHServer(database *Database, auth *Auth, permissions *Permissions) (*SS
 		PublicKeyHandler: sshServer.publicKeyHandler,
 		HostSigners:      signers,
 		ChannelHandlers: map[string]ssh.ChannelHandler{
-			"direct-tcpip": DirectTCPIPHandler,
+			"direct-tcpip": sshServer.directTCPIPHandler,
 			"session":      ssh.DefaultSessionHandler,
 		},
-		LocalPortForwardingCallback: sshServer.checkDestination,
 	}
 
 	return &sshServer, nil
@@ -111,39 +109,4 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 	if err != nil {
 		slog.Error("error executing ssh.txt template", "error", err)
 	}
-}
-
-// checkDestination validates if the user is allowed to forward to the given destination.
-func (s *SSHServer) checkDestination(ctx ssh.Context, destHost string, destPort uint32) bool {
-	user, err := s.database.GetUser(ctx.User())
-	if err != nil {
-		slog.Error("failed to get user from database", "user", ctx.User(), "error", err)
-		return false
-	}
-	// Check OAuth token validity
-	err, err2 := s.auth.CheckUserToken(user, nil)
-	if err != nil {
-		// token invalid
-		return false
-	}
-	if err2 != nil {
-		slog.Error("failed to update access token in database", "error", err2, "user", ctx.User())
-		return false
-	}
-
-	// Resolve destination host to IP addresses
-	ips, err := net.LookupIP(destHost)
-	if err != nil || len(ips) == 0 {
-		slog.Error("failed to resolve destination host", "host", destHost, "error", err)
-		return false
-	}
-
-	// Check permissions for each resolved IP
-	for _, ip := range ips {
-		if !s.permissions.CheckPermission(ctx.User(), ip.String()) {
-			slog.Warn("permission denied for user", "user", ctx.User(), "ip", ip.String())
-			return false
-		}
-	}
-	return true
 }

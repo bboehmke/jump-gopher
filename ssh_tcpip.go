@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"log/slog"
 	"net"
 	"strconv"
 
@@ -9,7 +10,9 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-// taken from tcpip.go of github.com/gliderlabs/ssh to add metric collection
+// based on tcpip.go of github.com/gliderlabs/ssh
+//  > add metric collection
+//  > improved error messages
 
 // direct-tcpip data struct as specified in RFC4254, Section 7.2
 type localForwardChannelData struct {
@@ -20,18 +23,53 @@ type localForwardChannelData struct {
 	OriginPort uint32
 }
 
-// DirectTCPIPHandler can be enabled by adding it to the server's
-// ChannelHandlers under direct-tcpip.
-func DirectTCPIPHandler(srv *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
+// directTCPIPHandler handles direct-tcpip channels
+func (s *SSHServer) directTCPIPHandler(_ *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
 	d := localForwardChannelData{}
 	if err := gossh.Unmarshal(newChan.ExtraData(), &d); err != nil {
 		newChan.Reject(gossh.ConnectionFailed, "error parsing forward data: "+err.Error())
 		return
 	}
 
-	if srv.LocalPortForwardingCallback == nil || !srv.LocalPortForwardingCallback(ctx, d.DestAddr, d.DestPort) {
-		newChan.Reject(gossh.Prohibited, "port forwarding is disabled")
+	// get user from database and check for validity
+	user, err := s.database.GetUser(ctx.User())
+	if err != nil {
+		slog.Error("failed to get user from database", "user", ctx.User(), "error", err)
+		newChan.Reject(gossh.ConnectionFailed, "failed to get user from database")
 		return
+	}
+	if user.ID == 0 {
+		newChan.Reject(gossh.Prohibited, "unknown user")
+		return
+	}
+
+	// Check OAuth token validity
+	err, err2 := s.auth.CheckUserToken(user, nil)
+	if err != nil {
+		newChan.Reject(gossh.Prohibited, "invalid/expired auth token > login on web interface")
+		return
+	}
+	if err2 != nil {
+		slog.Error("failed to update access token in database", "error", err2, "user", ctx.User())
+		newChan.Reject(gossh.ConnectionFailed, "failed to update access token")
+		return
+	}
+
+	// Resolve destination host to IP addresses
+	ips, err := net.LookupIP(d.DestAddr)
+	if err != nil || len(ips) == 0 {
+		slog.Error("failed to resolve destination host", "host", d.DestAddr, "error", err)
+		newChan.Reject(gossh.ConnectionFailed, "failed to resolve destination host "+d.DestAddr)
+		return
+	}
+
+	// Check permissions for each resolved IP
+	for _, ip := range ips {
+		if !s.permissions.CheckPermission(ctx.User(), ip.String()) {
+			slog.Warn("permission denied for user", "user", ctx.User(), "ip", ip.String())
+			newChan.Reject(gossh.Prohibited, "permission denied for "+ip.String())
+			return
+		}
 	}
 
 	dest := net.JoinHostPort(d.DestAddr, strconv.FormatInt(int64(d.DestPort), 10))
