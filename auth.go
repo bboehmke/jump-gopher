@@ -112,6 +112,7 @@ func (a *Auth) login(writer http.ResponseWriter, request *http.Request) {
 		MaxAge:   60 * 5,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   request.Header.Get("X-Forwarded-Proto") == "https",
 	})
 
 	// Redirect user to OAuth provider's login page
@@ -222,6 +223,7 @@ func (a *Auth) callback(writer http.ResponseWriter, request *http.Request) {
 		MaxAge:   60 * 60 * 24,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   request.Header.Get("X-Forwarded-Proto") == "https",
 	})
 	http.Redirect(writer, request, "/", http.StatusTemporaryRedirect)
 }
