@@ -3,11 +3,11 @@ package main
 import (
 	"flag"
 	"log/slog"
+	"net/http"
 	"os"
 	"reflect"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"golang.org/x/oauth2"
 )
 
@@ -34,8 +34,8 @@ type Config struct {
 	PermissionsConfig string `conf:"PERMISSIONS_CONFIG,data/permissions.yml"`
 }
 
-// OAuthConfig returns an oauth2.Config for the current configuration and request context.
-func (c *Config) OAuthConfig(ctx *gin.Context) oauth2.Config {
+// OAuthConfig returns an oauth2.Config for the current configuration and request
+func (c *Config) OAuthConfig(request *http.Request) oauth2.Config {
 	conf := oauth2.Config{
 		ClientID:     c.OAuthID,
 		ClientSecret: c.OAuthSecret,
@@ -46,15 +46,15 @@ func (c *Config) OAuthConfig(ctx *gin.Context) oauth2.Config {
 		},
 	}
 
-	// if ctx is given, set redirect URL based on request
-	if ctx != nil {
+	// if request is given, set redirect URL based on request
+	if request != nil {
 		var scheme string
-		if ctx.Request.Header.Get("X-Forwarded-Proto") == "https" {
+		if request.Header.Get("X-Forwarded-Proto") == "https" {
 			scheme = "https"
 		} else {
 			scheme = "http"
 		}
-		conf.RedirectURL = scheme + "://" + ctx.Request.Host + "/auth/callback"
+		conf.RedirectURL = scheme + "://" + request.Host + "/auth/callback"
 	}
 
 	return conf

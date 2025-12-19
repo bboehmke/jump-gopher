@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/oauth2"
 	"gorm.io/gorm"
@@ -31,18 +30,10 @@ func NewAuth(db *Database) *Auth {
 	}
 }
 
-// Register sets up the authentication routes on the provided router.
-func (a *Auth) Register(router gin.IRouter) {
-	authGroup := router.Group("/auth")
-
-	authGroup.GET("/login", a.login)
-	authGroup.GET("/callback", a.callback)
-}
-
 // CheckUserToken verifies the user's OAuth token and updates it if necessary.
 // Returns two errors: the first for token validity, the second for database errors.
-func (a *Auth) CheckUserToken(user *User, c *gin.Context) (error, error) {
-	conf := config.OAuthConfig(c)
+func (a *Auth) CheckUserToken(user *User, request *http.Request) (error, error) {
+	conf := config.OAuthConfig(request)
 	token := user.OAuthToken()
 
 	// Check token for validity and request a new token from the OAuth provider is access token is expired
@@ -66,50 +57,45 @@ func (a *Auth) CheckUserToken(user *User, c *gin.Context) (error, error) {
 
 // CheckAuth is a middleware that checks if the user is authenticated.
 // If not, it redirects to the login page.
-func (a *Auth) CheckAuth(c *gin.Context) {
-	sessionKey, err := c.Cookie("session_key")
+func (a *Auth) CheckAuth(writer http.ResponseWriter, request *http.Request) *User {
+	sessionKey, err := request.Cookie("session_key")
 	if err != nil {
 		// No session cookie -> redirect to login
-		c.Redirect(http.StatusTemporaryRedirect, "/auth/login")
-		c.Abort()
-		return
+		http.Redirect(writer, request, "/auth/login", http.StatusTemporaryRedirect)
+		return nil
 	}
 
-	user, err := a.Database.GetUserBySessionId(sessionKey)
+	user, err := a.Database.GetUserBySessionId(sessionKey.Value)
 	if err != nil {
 		// Session not found -> redirect to login
-		c.Redirect(http.StatusTemporaryRedirect, "/auth/login")
-		c.Abort()
-		return
+		http.Redirect(writer, request, "/auth/login", http.StatusTemporaryRedirect)
+		return nil
 	}
 
 	// Check if token is still valid
-	err, err2 := a.CheckUserToken(user, c)
+	err, err2 := a.CheckUserToken(user, request)
 	if err != nil {
 		// Session invalid -> redirect to login
-		c.Redirect(http.StatusTemporaryRedirect, "/auth/login")
-		c.Abort()
-		return
+		http.Redirect(writer, request, "/auth/login", http.StatusTemporaryRedirect)
+		return nil
 	}
 	// err2 indicates a database error which should not be shown to the user
 	if err2 != nil {
 		slog.Error("failed to update access token in database", "error", err2, "user", user.Name)
-		c.Status(http.StatusInternalServerError)
-		c.Abort()
-		return
+		writer.WriteHeader(http.StatusInternalServerError)
+		return nil
 	}
 
-	// Session found -> set user in context for downstream handlers
-	c.Set("user", user)
+	return user
 }
 
 // login initiates the OAuth login process by redirecting to the provider's login page.
-func (a *Auth) login(c *gin.Context) {
+func (a *Auth) login(writer http.ResponseWriter, request *http.Request) {
 	// generate random state parameter
 	stateBytes, err := generateRandom()
 	if err != nil {
 		slog.Error("failed to generate random state", "error", err)
-		c.Status(http.StatusInternalServerError)
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -117,59 +103,64 @@ func (a *Auth) login(c *gin.Context) {
 	encryptedStateBytes, err := encrypt(stateBytes, a.StateEncryptionKey[:])
 	if err != nil {
 		slog.Error("failed to encrypt state", "error", err)
-		c.Status(http.StatusInternalServerError)
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	c.SetCookie("oauth_state", hex.EncodeToString(encryptedStateBytes), 300, "/", "", false, true)
+	http.SetCookie(writer, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    hex.EncodeToString(encryptedStateBytes),
+		MaxAge:   60 * 5,
+		Path:     "/",
+		HttpOnly: true,
+	})
 
 	// Redirect user to OAuth provider's login page
-	conf := config.OAuthConfig(c)
-	c.Redirect(http.StatusTemporaryRedirect, conf.AuthCodeURL(hex.EncodeToString(stateBytes), oauth2.AccessTypeOffline))
+	conf := config.OAuthConfig(request)
+	http.Redirect(writer, request, conf.AuthCodeURL(hex.EncodeToString(stateBytes), oauth2.AccessTypeOffline), http.StatusTemporaryRedirect)
 }
 
 // callback handles the OAuth provider's callback and creates the user session.
-func (a *Auth) callback(c *gin.Context) {
-	state, ok := c.GetQuery("state")
-	if !ok {
-		c.String(http.StatusBadRequest, "Missing OAuth state in callback")
+func (a *Auth) callback(writer http.ResponseWriter, request *http.Request) {
+	query := request.URL.Query()
+	if !query.Has("state") {
+		writeString(writer, http.StatusBadRequest, "Missing OAuth state in callback")
 		return
 	}
 
 	// retrieve and decrypt state from cookie
-	encryptedStateHex, err := c.Cookie("oauth_state")
+	encryptedStateHex, err := request.Cookie("oauth_state")
 	if err != nil {
-		c.String(http.StatusBadRequest, "Missing OAuth state cookie in callback")
+		writeString(writer, http.StatusBadRequest, "Missing OAuth state cookie in callback")
 		return
 	}
-	encryptedStateBytes, err := hex.DecodeString(encryptedStateHex)
+	encryptedStateBytes, err := hex.DecodeString(encryptedStateHex.Value)
 	if err != nil {
 		slog.Error("failed to decode encrypted state", "error", err)
-		c.String(http.StatusBadRequest, "Invalid OAuth state cookie in callback")
+		writeString(writer, http.StatusBadRequest, "Invalid OAuth state cookie in callback")
 		return
 	}
 	decryptedStateBytes, err := decrypt(encryptedStateBytes, a.StateEncryptionKey[:])
 	if err != nil {
 		slog.Error("failed to decrypt state", "error", err)
-		c.String(http.StatusBadRequest, "Invalid OAuth state cookie in callback")
+		writeString(writer, http.StatusBadRequest, "Invalid OAuth state cookie in callback")
 		return
 	}
 
 	// compare state parameters
-	if state != hex.EncodeToString(decryptedStateBytes) {
-		c.String(http.StatusBadRequest, "Invalid OAuth state in callback")
+	if query.Get("state") != hex.EncodeToString(decryptedStateBytes) {
+		writeString(writer, http.StatusBadRequest, "Invalid OAuth state in callback")
 		return
 	}
 
 	// get code from query
-	code, ok := c.GetQuery("code")
-	if !ok {
-		c.String(http.StatusBadRequest, "Missing OAuth code in callback")
+	if !query.Has("code") {
+		writeString(writer, http.StatusBadRequest, "Missing OAuth code in callback")
 		return
 	}
 
-	conf := config.OAuthConfig(c)
+	conf := config.OAuthConfig(request)
 	// Exchange the code for a token
-	tok, err := conf.Exchange(c, code)
+	tok, err := conf.Exchange(request.Context(), query.Get("code"))
 	if err != nil {
 		slog.Error("token exchange failed", "error", err)
 		return
@@ -194,7 +185,7 @@ func (a *Auth) callback(c *gin.Context) {
 	user, err := a.Database.GetUser(username)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Error("failed to query database", "error", err)
-		c.Status(http.StatusInternalServerError)
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -203,7 +194,7 @@ func (a *Auth) callback(c *gin.Context) {
 		user, err = a.Database.CreateUser(username)
 		if err != nil {
 			slog.Error("failed to create user", "error", err)
-			c.Status(http.StatusInternalServerError)
+			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
@@ -212,7 +203,7 @@ func (a *Auth) callback(c *gin.Context) {
 	sessionID, err := generateSessionID()
 	if err != nil {
 		slog.Error("failed to generate session id", "error", err)
-		c.Status(http.StatusInternalServerError)
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -220,11 +211,17 @@ func (a *Auth) callback(c *gin.Context) {
 	user.SetOAuthToken(tok)
 	if err := a.Database.Db.Save(user).Error; err != nil {
 		slog.Error("failed to update user in database", "error", err)
-		c.Status(http.StatusInternalServerError)
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	// Set session cookie and redirect to home
-	c.SetCookie("session_key", sessionID, 60*60*24, "/", "", false, true)
-	c.Redirect(http.StatusTemporaryRedirect, "/")
+	http.SetCookie(writer, &http.Cookie{
+		Name:     "session_key",
+		Value:    sessionID,
+		MaxAge:   60 * 60 * 24,
+		Path:     "/",
+		HttpOnly: true,
+	})
+	http.Redirect(writer, request, "/", http.StatusTemporaryRedirect)
 }

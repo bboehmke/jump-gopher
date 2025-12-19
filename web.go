@@ -15,7 +15,6 @@ import (
 
 	"github.com/bboehmke/jump-gopher/lib"
 	"github.com/coder/websocket"
-	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -29,47 +28,35 @@ type Web struct {
 	auth        *Auth
 	permissions *Permissions
 
-	router *gin.Engine
+	tpl *template.Template
+	mux *http.ServeMux
 }
 
 // NewWeb creates and configures a new Web instance, setting up routes and templates.
 func NewWeb(database *Database, auth *Auth, permissions *Permissions) (*Web, error) {
-	// disable debug mode if not enabled
-	if config.WebDebug != "true" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
 	web := &Web{
 		database:    database,
 		auth:        auth,
 		permissions: permissions,
 
-		router: gin.New(),
+		mux: http.NewServeMux(),
 	}
 
-	tpl, err := template.ParseFS(templates, "templates/*")
+	var err error
+	web.tpl, err = template.ParseFS(templates, "templates/*")
 	if err != nil {
 		return nil, fmt.Errorf("error parsing templates: %w", err)
 	}
 
-	web.router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
-		SkipPaths: []string{
-			"/metrics",
-			"/favicon.ico",
-		},
-	}), gin.Recovery())
-	web.router.SetHTMLTemplate(tpl)
-
-	auth.Register(web.router)
-
-	web.router.GET("/", auth.CheckAuth, web.handleIndex)
-	web.router.POST("/", auth.CheckAuth, web.handleIndex)
+	web.mux.HandleFunc("/{$}", web.handleIndex)
+	web.mux.HandleFunc("/auth/login", auth.login)
+	web.mux.HandleFunc("/auth/callback", auth.callback)
 
 	if strings.ToLower(config.WebEnableProxy) == "true" {
-		web.router.GET("/proxy", web.handleProxy)
+		web.mux.HandleFunc("/proxy", web.handleProxy)
 	}
 
-	web.router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	web.mux.Handle("/metrics", promhttp.Handler())
 	return web, nil
 }
 
@@ -77,9 +64,10 @@ func NewWeb(database *Database, auth *Auth, permissions *Permissions) (*Web, err
 func (w *Web) Run() {
 	server := http.Server{
 		Addr:              ":" + config.WebPort,
-		Handler:           w.router,
+		Handler:           httpRecovery(httpLogger(w.mux)),
 		ReadHeaderTimeout: time.Second * 5,
 	}
+
 	err := server.ListenAndServe()
 	if err != nil {
 		slog.Error("failed to start web server", "error", err)
@@ -88,40 +76,58 @@ func (w *Web) Run() {
 }
 
 // handleIndex renders the index page, showing user info, keys, and permissions.
-func (w *Web) handleIndex(c *gin.Context) {
-	user := c.MustGet("user").(*User)
+func (w *Web) handleIndex(writer http.ResponseWriter, request *http.Request) {
+	// Check user authentication
+	user := w.auth.CheckAuth(writer, request)
+	if user == nil {
+		// User not authenticated, CheckAuth already handled the response
+		return
+	}
 
 	// Handle POST actions (add/delete keys)
-	postError := w.handleIndexPost(c, user)
+	postError := w.handleIndexPost(request, user)
 
 	// Fetch user's public keys from the database
 	keys, err := w.database.GetPublicKeysOfUser(user)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Database error")
+		slog.Error("failed to fetch public keys", "user", user.Name, "error", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		_, _ = writer.Write([]byte("Database error"))
 		return
 	}
 
-	host := strings.Split(c.Request.Host, ":")[0]
-	c.HTML(http.StatusOK, "index.html", gin.H{
-		"user_name":   c.MustGet("user").(*User).Name,
+	// render the index template
+	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	writer.WriteHeader(http.StatusOK)
+	host := strings.Split(request.Host, ":")[0]
+	err = w.tpl.ExecuteTemplate(writer, "index.html", map[string]interface{}{
+		"user_name":   user.Name,
 		"keys":        keys,
 		"permissions": w.permissions.GetUserPermissions(user.Name),
 		"error":       postError,
 		"host":        host,
 		"port":        config.SshPort,
 	})
+	if err != nil {
+		slog.Error("failed to render template", "error", err)
+	}
 }
 
 // handleIndexPost processes form submissions for adding or deleting public keys.
-func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
-	if c.Request.Method != http.MethodPost {
+func (w *Web) handleIndexPost(request *http.Request, user *User) error {
+	if request.Method != http.MethodPost {
 		return nil
 	}
 
-	action := c.PostForm("action")
+	err := request.ParseForm()
+	if err != nil {
+		return fmt.Errorf("failed to parse form: %w", err)
+	}
+
+	action := request.PostForm.Get("action")
 	if action == "add" {
-		name := c.PostForm("name")
-		publicKey := c.PostForm("public_key")
+		name := request.PostForm.Get("name")
+		publicKey := request.PostForm.Get("public_key")
 
 		if publicKey == "" {
 			return errors.New("public Key is required")
@@ -145,7 +151,7 @@ func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 		return nil
 
 	} else if action == "delete" {
-		id := c.PostForm("id")
+		id := request.PostForm.Get("id")
 		if id == "" {
 			return errors.New("id is required")
 		}
@@ -157,15 +163,14 @@ func (w *Web) handleIndexPost(c *gin.Context, user *User) error {
 		}
 		return nil
 
-	} else {
-		return fmt.Errorf("invalid action: %s", action)
 	}
+	return fmt.Errorf("invalid action: %s", action)
 }
 
 // handleProxy upgrades the HTTP connection to a websocket and proxies data between
 // the websocket and a local SSH server socket.
-func (w *Web) handleProxy(c *gin.Context) {
-	ws, err := websocket.Accept(c.Writer, c.Request, nil)
+func (w *Web) handleProxy(writer http.ResponseWriter, request *http.Request) {
+	ws, err := websocket.Accept(writer, request, nil)
 	if err != nil {
 		slog.Error("failed to accept websocket connection", "error", err)
 		return
@@ -180,7 +185,7 @@ func (w *Web) handleProxy(c *gin.Context) {
 	}
 	defer sshSocket.Close()
 
-	ctx, cancel := context.WithCancel(c)
+	ctx, cancel := context.WithCancel(request.Context())
 	defer cancel()
 
 	// websocket -> server
@@ -197,4 +202,44 @@ func (w *Web) handleProxy(c *gin.Context) {
 	if err != nil {
 		slog.Error("failed to write to websocket", "error", err)
 	}
+}
+
+// writeString is a helper function to write a string response with a given status code.
+func writeString(writer http.ResponseWriter, status int, body string) {
+	writer.WriteHeader(status)
+	_, _ = writer.Write([]byte(body))
+}
+
+// httpLogger is a middleware that logs HTTP requests with method, path, client IP, and duration.
+func httpLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(writer, request)
+		duration := time.Since(start)
+
+		clientIp := request.Header.Get("X-Forwarded-For")
+		if clientIp == "" {
+			clientIp, _, _ = net.SplitHostPort(strings.TrimSpace(request.RemoteAddr))
+		}
+
+		slog.Info("http",
+			"method", request.Method,
+			"path", request.URL.Path,
+			"client_ip", clientIp,
+			"duration", duration.String(),
+		)
+	})
+}
+
+// httpRecovery is a middleware that recovers from panics in HTTP handlers and returns a 500 error.
+func httpRecovery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				slog.Error("panic recovered in http handler", "error", err)
+				writeString(writer, http.StatusInternalServerError, "Internal Server Error (Panic)")
+			}
+		}()
+		next.ServeHTTP(writer, request)
+	})
 }
