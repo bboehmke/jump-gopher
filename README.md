@@ -11,6 +11,29 @@ Jump Gopher is a simple SSH jump/proxy server supporting fine-grained permission
 - Optional websocket proxy for SSH connections
 - Prometheus metrics
 
+### Docker example
+
+The jump proxy is straightforward to run using Docker and Docker Compose:
+
+```yaml
+services:
+  jump-gopher:
+    image: ghcr.io/bboehmke/jump-gopher:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # web UI
+      - "2222:2222"   # SSH jump server
+    environment:
+      OAUTH_ID: "..."
+      OAUTH_SECRET: "..."
+      OAUTH_AUTH_URL: "..."
+      OAUTH_TOKEN_URL: "..."
+    volumes:
+      - ./data:/data
+```
+
+> **Note:** For production use, a reverse proxy and a postgres database are recommended.
+
 ## Configuration
 
 The application is configured via environment variables. The following table 
