@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"text/template"
+	"time"
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
@@ -81,20 +82,23 @@ func (s *SSHServer) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 func (s *SSHServer) sessionHandler(ses ssh.Session) {
 	user, err := s.database.GetUser(ses.User())
 	var accountStatus string
+	var accountValid bool
 	if err != nil {
 		slog.Error("failed to get user from database", "user", ses.User(), "error", err)
 		accountStatus = "invalid - no access"
 	} else {
 		// Check OAuth token validity
 		err, err2 := s.auth.CheckUserToken(user, nil)
-		accountStatus = "valid"
 		if err != nil {
 			// invalid token
-			accountStatus = "invalid - no access"
-		}
-		if err2 != nil {
+			accountStatus = fmt.Sprintf("invalid - no access (%s)", err.Error())
+		} else if err2 != nil {
 			slog.Error("failed to update access token in database", "error", err2, "user", ses.User())
 			accountStatus = "Database error"
+		} else {
+			// token valid - show expiry date
+			accountStatus = fmt.Sprintf("valid - expires at %s", user.Expiry.Format(time.RFC3339))
+			accountValid = true
 		}
 	}
 
@@ -104,6 +108,7 @@ func (s *SSHServer) sessionHandler(ses ssh.Session) {
 	err = s.tpl.ExecuteTemplate(ses, "ssh.txt", map[string]any{
 		"user_name":      ses.User(),
 		"account_status": accountStatus,
+		"account_valid":  accountValid,
 		"permissions":    permissions,
 	})
 	if err != nil {

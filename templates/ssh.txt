@@ -1,7 +1,7 @@
 Hello {{ .user_name }}!
 
 Account Status: >>{{.account_status}}<<
-{{ if ne .account_status "valid" }}
+{{ if not .account_valid }}
 Please login to the web portal to update your account status.
 {{ end }}
 
