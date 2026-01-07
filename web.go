@@ -217,6 +217,11 @@ func httpLogger(next http.Handler) http.Handler {
 		next.ServeHTTP(writer, request)
 		duration := time.Since(start)
 
+		// no log for metrics endpoint
+		if request.URL.Path == "/metrics" {
+			return
+		}
+
 		clientIp := request.Header.Get("X-Forwarded-For")
 		if clientIp == "" {
 			clientIp, _, _ = net.SplitHostPort(strings.TrimSpace(request.RemoteAddr))
