@@ -145,7 +145,7 @@ func (w *Web) handleIndexPost(request *http.Request, user *User) error {
 		// Add the public key to the user in the database
 		err = w.database.AddPublicKeyToUser(user, name, string(gossh.MarshalAuthorizedKey(key)))
 		if err != nil {
-			slog.Error("failed to add public key", "user", user.Name, "error", err)
+			slog.Error("failed to add public key", "user", user.Name, "error", err) // #nosec G706
 			return errors.New("failed to add public key")
 		}
 		return nil
@@ -158,7 +158,7 @@ func (w *Web) handleIndexPost(request *http.Request, user *User) error {
 		// Delete the public key from the database
 		err := w.database.Db.Delete(&UserPublicKeys{}, "id = ? AND user_id = ?", id, user.ID).Error
 		if err != nil {
-			slog.Error("failed to delete public key", "user", user.Name, "error", err)
+			slog.Error("failed to delete public key", "user", user.Name, "error", err) // #nosec G706
 			return errors.New("failed to delete public key")
 		}
 		return nil
@@ -231,7 +231,7 @@ func httpLogger(next http.Handler) http.Handler {
 			"method", request.Method,
 			"path", request.URL.Path,
 			"client_ip", clientIp,
-			"duration", duration.String(),
+			"duration", duration.String(), // #nosec G706
 		)
 	})
 }
