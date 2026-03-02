@@ -227,11 +227,12 @@ func httpLogger(next http.Handler) http.Handler {
 			clientIp, _, _ = net.SplitHostPort(strings.TrimSpace(request.RemoteAddr))
 		}
 
+		// #nosec G706
 		slog.Info("http",
 			"method", request.Method,
 			"path", request.URL.Path,
 			"client_ip", clientIp,
-			"duration", duration.String(), // #nosec G706
+			"duration", duration.String(),
 		)
 	})
 }
