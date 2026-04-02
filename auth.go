@@ -113,6 +113,7 @@ func (a *Auth) login(writer http.ResponseWriter, request *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   request.Header.Get("X-Forwarded-Proto") == "https",
+		SameSite: http.SameSiteStrictMode,
 	})
 
 	// Redirect user to OAuth provider's login page
@@ -224,6 +225,7 @@ func (a *Auth) callback(writer http.ResponseWriter, request *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   request.Header.Get("X-Forwarded-Proto") == "https",
+		SameSite: http.SameSiteStrictMode,
 	})
 	http.Redirect(writer, request, "/", http.StatusTemporaryRedirect)
 }
