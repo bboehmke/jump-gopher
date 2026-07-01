@@ -3,7 +3,7 @@ module github.com/bboehmke/jump-gopher
 go 1.25.0
 
 require (
-	github.com/coder/websocket v1.8.14
+	github.com/coder/websocket v1.8.15
 	github.com/glebarez/sqlite v1.11.0
 	github.com/gliderlabs/ssh v0.3.8
 	github.com/goccy/go-yaml v1.19.2
