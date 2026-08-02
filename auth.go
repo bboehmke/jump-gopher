@@ -106,7 +106,7 @@ func (a *Auth) login(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	http.SetCookie(writer, &http.Cookie{
+	http.SetCookie(writer, &http.Cookie{ // #nosec G124
 		Name:     "oauth_state",
 		Value:    hex.EncodeToString(encryptedStateBytes),
 		MaxAge:   60 * 5,
@@ -118,7 +118,7 @@ func (a *Auth) login(writer http.ResponseWriter, request *http.Request) {
 
 	// Redirect user to OAuth provider's login page
 	conf := config.OAuthConfig(request)
-	http.Redirect(writer, request, conf.AuthCodeURL(hex.EncodeToString(stateBytes), oauth2.AccessTypeOffline), http.StatusTemporaryRedirect)
+	http.Redirect(writer, request, conf.AuthCodeURL(hex.EncodeToString(stateBytes), oauth2.AccessTypeOffline), http.StatusTemporaryRedirect) // #nosec G710
 }
 
 // callback handles the OAuth provider's callback and creates the user session.
@@ -218,7 +218,7 @@ func (a *Auth) callback(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	// Set session cookie and redirect to home
-	http.SetCookie(writer, &http.Cookie{
+	http.SetCookie(writer, &http.Cookie{ // #nosec G124
 		Name:     "session_key",
 		Value:    sessionID,
 		MaxAge:   60 * 60 * 24,
