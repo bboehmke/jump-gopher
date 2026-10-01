@@ -1,6 +1,6 @@
 module github.com/bboehmke/jump-gopher
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -10,7 +10,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/prometheus/client_golang v1.24.1
 	golang.org/x/crypto v0.55.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 	gorm.io/driver/postgres v1.6.2
 	gorm.io/gorm v1.31.2
 )
