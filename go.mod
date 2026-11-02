@@ -8,7 +8,7 @@ require (
 	github.com/gliderlabs/ssh v0.3.8
 	github.com/goccy/go-yaml v1.19.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/prometheus/client_golang v1.24.1
+	github.com/prometheus/client_golang v1.25.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/oauth2 v0.37.0
 	gorm.io/driver/postgres v1.6.3
